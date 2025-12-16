@@ -333,6 +333,37 @@ final class SwiftHighlightTests: XCTestCase {
     }
 
     @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+    func testSwiftUIAttributedStringUnknownLanguage() {
+        Languages.registerAll(hljs)
+
+        let code = "some plain text"
+        let theme = Theme.githubDark
+
+        // Test with empty language string (fallback path)
+        let attributed = hljs.highlightAttributedString(code, language: "", theme: theme)
+
+        // Should match source text
+        XCTAssertEqual(String(attributed.characters), code)
+
+        // Should have the default theme color (RGB 201, 209, 217 for dark)
+        let range = attributed.characters.startIndex..<attributed.characters.index(attributed.characters.startIndex, offsetBy: 4)
+        let run = attributed[range]
+
+        if let fgColor = run.foregroundColor {
+            let resolved = fgColor.resolve(in: .init())
+            let r = Int(resolved.red * 255)
+            let g = Int(resolved.green * 255)
+            let b = Int(resolved.blue * 255)
+            print("Unknown language - Text color: RGB(\(r), \(g), \(b)) - expected RGB(201, 209, 217)")
+            XCTAssertEqual(r, 201, accuracy: 2, "Default red should be ~201")
+            XCTAssertEqual(g, 209, accuracy: 2, "Default green should be ~209")
+            XCTAssertEqual(b, 217, accuracy: 2, "Default blue should be ~217")
+        } else {
+            XCTFail("Plain text should have a foreground color even with unknown language")
+        }
+    }
+
+    @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
     func testSwiftUIAttributedStringGitHubDark() {
         Languages.registerAll(hljs)
 
