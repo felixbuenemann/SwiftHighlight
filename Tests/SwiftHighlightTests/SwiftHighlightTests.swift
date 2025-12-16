@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import SwiftHighlight
 
 final class SwiftHighlightTests: XCTestCase {
@@ -281,6 +282,101 @@ final class SwiftHighlightTests: XCTestCase {
             }
         }
         XCTAssertTrue(foundDefaultColor, "Plain text should have theme's default color")
+    }
+
+    @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+    func testSwiftUIAttributedStringGitHubLight() {
+        Languages.registerAll(hljs)
+
+        let code = "let x = 42"
+        let theme = Theme.githubLight
+
+        let attributed = hljs.highlightAttributedString(code, language: "swift", theme: theme)
+
+        // Should match source text
+        XCTAssertEqual(String(attributed.characters), code)
+
+        // Check for foreground color on keyword "let" (RGB 215, 58, 73)
+        let keywordRange = attributed.characters.startIndex..<attributed.characters.index(attributed.characters.startIndex, offsetBy: 3)
+        let keywordRun = attributed[keywordRange]
+
+        if let fgColor = keywordRun.foregroundColor {
+            // Convert SwiftUI Color to components for comparison
+            let resolved = fgColor.resolve(in: .init())
+            let r = Int(resolved.red * 255)
+            let g = Int(resolved.green * 255)
+            let b = Int(resolved.blue * 255)
+            print("GitHub Light - Keyword 'let' color: RGB(\(r), \(g), \(b)) - expected RGB(215, 58, 73)")
+            XCTAssertEqual(r, 215, accuracy: 2, "Keyword red component should be ~215")
+            XCTAssertEqual(g, 58, accuracy: 2, "Keyword green component should be ~58")
+            XCTAssertEqual(b, 73, accuracy: 2, "Keyword blue component should be ~73")
+        } else {
+            XCTFail("Keyword 'let' should have a foreground color")
+        }
+
+        // Check default text color on " x " (RGB 36, 41, 46)
+        let textRange = attributed.characters.index(attributed.characters.startIndex, offsetBy: 3)..<attributed.characters.index(attributed.characters.startIndex, offsetBy: 6)
+        let textRun = attributed[textRange]
+
+        if let fgColor = textRun.foregroundColor {
+            let resolved = fgColor.resolve(in: .init())
+            let r = Int(resolved.red * 255)
+            let g = Int(resolved.green * 255)
+            let b = Int(resolved.blue * 255)
+            print("GitHub Light - Default text color: RGB(\(r), \(g), \(b)) - expected RGB(36, 41, 46)")
+            XCTAssertEqual(r, 36, accuracy: 2, "Default red component should be ~36")
+            XCTAssertEqual(g, 41, accuracy: 2, "Default green component should be ~41")
+            XCTAssertEqual(b, 46, accuracy: 2, "Default blue component should be ~46")
+        } else {
+            XCTFail("Default text should have a foreground color")
+        }
+    }
+
+    @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+    func testSwiftUIAttributedStringGitHubDark() {
+        Languages.registerAll(hljs)
+
+        let code = "let x = 42"
+        let theme = Theme.githubDark
+
+        let attributed = hljs.highlightAttributedString(code, language: "swift", theme: theme)
+
+        // Should match source text
+        XCTAssertEqual(String(attributed.characters), code)
+
+        // Check for foreground color on keyword "let" (RGB 255, 123, 114)
+        let keywordRange = attributed.characters.startIndex..<attributed.characters.index(attributed.characters.startIndex, offsetBy: 3)
+        let keywordRun = attributed[keywordRange]
+
+        if let fgColor = keywordRun.foregroundColor {
+            let resolved = fgColor.resolve(in: .init())
+            let r = Int(resolved.red * 255)
+            let g = Int(resolved.green * 255)
+            let b = Int(resolved.blue * 255)
+            print("GitHub Dark - Keyword 'let' color: RGB(\(r), \(g), \(b)) - expected RGB(255, 123, 114)")
+            XCTAssertEqual(r, 255, accuracy: 2, "Keyword red component should be ~255")
+            XCTAssertEqual(g, 123, accuracy: 2, "Keyword green component should be ~123")
+            XCTAssertEqual(b, 114, accuracy: 2, "Keyword blue component should be ~114")
+        } else {
+            XCTFail("Keyword 'let' should have a foreground color")
+        }
+
+        // Check default text color on " x " (RGB 201, 209, 217)
+        let textRange = attributed.characters.index(attributed.characters.startIndex, offsetBy: 3)..<attributed.characters.index(attributed.characters.startIndex, offsetBy: 6)
+        let textRun = attributed[textRange]
+
+        if let fgColor = textRun.foregroundColor {
+            let resolved = fgColor.resolve(in: .init())
+            let r = Int(resolved.red * 255)
+            let g = Int(resolved.green * 255)
+            let b = Int(resolved.blue * 255)
+            print("GitHub Dark - Default text color: RGB(\(r), \(g), \(b)) - expected RGB(201, 209, 217)")
+            XCTAssertEqual(r, 201, accuracy: 2, "Default red component should be ~201")
+            XCTAssertEqual(g, 209, accuracy: 2, "Default green component should be ~209")
+            XCTAssertEqual(b, 217, accuracy: 2, "Default blue component should be ~217")
+        } else {
+            XCTFail("Default text should have a foreground color")
+        }
     }
 
     // Helper to compare colors (allowing for small floating point differences)
