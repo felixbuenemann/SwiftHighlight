@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 #if canImport(AppKit)
 import AppKit
@@ -101,7 +102,46 @@ public class AttributedStringRenderer {
 
     @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
     public func renderAttributedString(_ node: TokenNode) -> AttributedString {
-        return AttributedString(render(node))
+        var result = AttributedString()
+        renderNodeToAttributedString(node, to: &result, inheritedStyle: theme.defaultStyle)
+        return result
+    }
+
+    @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+    private func renderNodeToAttributedString(_ node: TokenNode, to result: inout AttributedString, inheritedStyle: ThemeStyle) {
+        let style: ThemeStyle
+        if let scope = node.scope, !scope.isEmpty {
+            style = theme.style(for: scope)
+        } else {
+            style = inheritedStyle
+        }
+        renderChildrenToAttributedString(node.children, to: &result, style: style)
+    }
+
+    @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+    private func renderChildrenToAttributedString(_ children: [TokenChild], to result: inout AttributedString, style: ThemeStyle) {
+        for child in children {
+            switch child {
+            case .text(let text):
+                var attributed = AttributedString(text)
+                attributed.font = Font(font)
+                if let color = style.foregroundColor {
+                    attributed.foregroundColor = Color(color)
+                } else if let defaultColor = theme.defaultStyle.foregroundColor {
+                    attributed.foregroundColor = Color(defaultColor)
+                }
+                if let bgColor = style.backgroundColor {
+                    attributed.backgroundColor = Color(bgColor)
+                }
+                // Note: bold/italic are handled via font, underline via underlineStyle
+                if style.underline {
+                    attributed.underlineStyle = .single
+                }
+                result.append(attributed)
+            case .node(let node):
+                renderNodeToAttributedString(node, to: &result, inheritedStyle: style)
+            }
+        }
     }
 }
 
@@ -160,7 +200,19 @@ public extension HighlightJS {
         theme: Theme,
         font: PlatformFont? = nil
     ) -> AttributedString {
-        return AttributedString(highlightAttributed(code, language: language, theme: theme, font: font))
+        let result = highlight(code, language: language, ignoreIllegals: true)
+
+        guard let tokenTree = result.tokenTree else {
+            // Fallback: return plain text with default style
+            var attributed = AttributedString(code)
+            if let color = theme.defaultStyle.foregroundColor {
+                attributed.foregroundColor = Color(color)
+            }
+            return attributed
+        }
+
+        let renderer = AttributedStringRenderer(theme: theme, font: font)
+        return renderer.renderAttributedString(tokenTree)
     }
 
     @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
@@ -170,7 +222,17 @@ public extension HighlightJS {
         font: PlatformFont? = nil,
         languageSubset: [String]? = nil
     ) -> (attributedString: AttributedString, language: String?) {
-        let result = highlightAutoAttributed(code, theme: theme, font: font, languageSubset: languageSubset)
-        return (AttributedString(result.attributedString), result.language)
+        let result = highlightAuto(code, languageSubset: languageSubset)
+
+        guard let tokenTree = result.tokenTree else {
+            var attributed = AttributedString(code)
+            if let color = theme.defaultStyle.foregroundColor {
+                attributed.foregroundColor = Color(color)
+            }
+            return (attributed, result.language)
+        }
+
+        let renderer = AttributedStringRenderer(theme: theme, font: font)
+        return (renderer.renderAttributedString(tokenTree), result.language)
     }
 }
