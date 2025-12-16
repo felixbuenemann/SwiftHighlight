@@ -387,13 +387,15 @@ public class HighlightJS {
             modeStack.removeLast()
         }
 
-        return HighlightResult(
+        var result = HighlightResult(
             value: emitter.toHTML(),
             language: language.name,
             relevance: relevance,
             illegal: false,
             code: code
         )
+        result.emitter = emitter
+        return result
     }
 
     /// Find the next match in the code for the current mode

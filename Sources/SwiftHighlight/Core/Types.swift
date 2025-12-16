@@ -25,6 +25,11 @@ public struct HighlightResult {
     /// For internal use: the emitter containing the token tree
     internal var emitter: TokenTreeEmitter?
 
+    /// The token tree for attributed string rendering
+    public var tokenTree: TokenNode? {
+        return emitter?.rootNode
+    }
+
     public init(
         value: String = "",
         language: String? = nil,
@@ -47,6 +52,18 @@ public struct AutoHighlightResult {
 
     /// The second-best language match
     public var secondBest: HighlightResult?
+
+    /// Convenience: the highlighted value
+    public var value: String { result.value }
+
+    /// Convenience: the detected language
+    public var language: String? { result.language }
+
+    /// Convenience: the relevance score
+    public var relevance: Double { result.relevance }
+
+    /// Convenience: the token tree for attributed string rendering
+    public var tokenTree: TokenNode? { result.tokenTree }
 }
 
 // MARK: - Options

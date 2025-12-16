@@ -236,4 +236,69 @@ final class SwiftHighlightTests: XCTestCase {
         XCTAssertTrue(result.value.contains("&gt;"))
         XCTAssertTrue(result.value.contains("&amp;"))
     }
+
+    // MARK: - AttributedString Renderer Tests
+
+    func testAttributedStringRenderer() {
+        Languages.registerAll(hljs)
+
+        let code = "let x = 42"
+
+        let theme = Theme.githubLight
+        let attributed = hljs.highlightAttributed(code, language: "swift", theme: theme)
+
+        // Should not be empty and match source
+        XCTAssertGreaterThan(attributed.length, 0)
+        XCTAssertEqual(attributed.string, code)
+
+        // Should have font attribute throughout
+        var hasFont = false
+        attributed.enumerateAttribute(.font, in: NSRange(location: 0, length: attributed.length)) { value, _, _ in
+            if value != nil {
+                hasFont = true
+            }
+        }
+        XCTAssertTrue(hasFont, "AttributedString should have font attributes")
+
+        // Check that "let" keyword has the theme's keyword color (RGB 215, 58, 73)
+        let keywordColor = PlatformColor(r: 215, g: 58, b: 73)
+        var foundKeywordColor = false
+        // "let" is at position 0-2
+        attributed.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: 3)) { value, _, _ in
+            if let color = value as? PlatformColor, colorsMatch(color, keywordColor) {
+                foundKeywordColor = true
+            }
+        }
+        XCTAssertTrue(foundKeywordColor, "Keyword 'let' should have theme's keyword color")
+
+        // Check that non-keyword text has the default color (RGB 36, 41, 46)
+        let defaultColor = PlatformColor(r: 36, g: 41, b: 46)
+        var foundDefaultColor = false
+        // " x " is at position 3-5
+        attributed.enumerateAttribute(.foregroundColor, in: NSRange(location: 4, length: 1)) { value, _, _ in
+            if let color = value as? PlatformColor, colorsMatch(color, defaultColor) {
+                foundDefaultColor = true
+            }
+        }
+        XCTAssertTrue(foundDefaultColor, "Plain text should have theme's default color")
+    }
+
+    // Helper to compare colors (allowing for small floating point differences)
+    private func colorsMatch(_ c1: PlatformColor, _ c2: PlatformColor) -> Bool {
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+
+        #if canImport(AppKit)
+        let color1 = c1.usingColorSpace(.sRGB) ?? c1
+        let color2 = c2.usingColorSpace(.sRGB) ?? c2
+        color1.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+        color2.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        #else
+        c1.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+        c2.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        #endif
+
+        let tolerance: CGFloat = 0.01
+        return abs(r1 - r2) < tolerance && abs(g1 - g2) < tolerance && abs(b1 - b2) < tolerance
+    }
 }

@@ -8,8 +8,9 @@ A Swift port of [highlight.js](https://highlightjs.org/) for syntax highlighting
 - Pure Swift implementation with no dependencies
 - Cross-platform: macOS, iOS, tvOS, watchOS
 - Auto-detection of language
-- HTML output with CSS class-based styling
-- Compatible with highlight.js themes
+- HTML and NSAttributedString output
+- Built-in themes with light/dark mode support
+- Compatible with highlight.js CSS themes
 
 ## Installation
 
@@ -64,6 +65,34 @@ let hljs = HighlightJS()
 hljs.configure(options: HighlightOptions(classPrefix: "code-"))
 ```
 
+### HTML Output
+
+```swift
+let hljs = HighlightJS()
+Languages.registerAll(hljs)
+
+let result = hljs.highlight("let x = 42", language: "swift", ignoreIllegals: true)
+print(result.value)
+// <span class="hljs-keyword">let</span> x = <span class="hljs-number">42</span>
+```
+
+### AttributedString Output
+
+```swift
+let hljs = HighlightJS()
+Languages.registerAll(hljs)
+
+// Use a built-in theme (supports light/dark mode)
+let theme = ThemePair.github.theme(for: appearance)
+
+let attributed = hljs.highlightAttributed(
+    "let x = 42",
+    language: "swift",
+    theme: theme
+)
+// Returns NSAttributedString ready for display
+```
+
 ### SwiftUI Integration
 
 ```swift
@@ -73,14 +102,17 @@ import SwiftHighlight
 struct CodeView: View {
     let code: String
     let language: String
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         let hljs = HighlightJS()
         Languages.registerAll(hljs)
-        let result = try? hljs.highlight(code, language: language)
 
-        // Use with AttributedString or WebView for HTML rendering
-        Text(result?.value ?? code)
+        let theme = colorScheme == .dark ? Theme.githubDark : Theme.githubLight
+        let attributed = hljs.highlightAttributed(code, language: language, theme: theme)
+
+        Text(AttributedString(attributed))
+            .textSelection(.enabled)
     }
 }
 ```
@@ -95,9 +127,19 @@ SwiftHighlight supports 192 languages including:
 - **Data**: SQL, YAML, TOML/INI
 - **And many more**: See `Languages.all` for the complete list
 
-## Styling
+## Themes
 
-SwiftHighlight outputs HTML with CSS classes compatible with highlight.js themes. You can use any [highlight.js theme](https://highlightjs.org/demo) by including the CSS.
+### Built-in Themes
+
+SwiftHighlight includes themes with light/dark mode support:
+
+- `ThemePair.github` - GitHub style
+- `ThemePair.xcode` - Xcode style
+- `ThemePair.vs` - Visual Studio style
+
+### CSS Themes (HTML output)
+
+HTML output uses CSS classes compatible with highlight.js themes. You can use any [highlight.js theme](https://highlightjs.org/demo) by including the CSS.
 
 Example classes:
 - `.hljs-keyword` - language keywords
