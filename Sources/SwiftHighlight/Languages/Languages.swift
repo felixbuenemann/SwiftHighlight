@@ -1,0 +1,238 @@
+// Auto-generated registry for all SwiftHighlight languages
+
+import Foundation
+
+/// Registry for all built-in language definitions
+public enum Languages {
+
+    /// Register all built-in languages with the given highlighter
+    public static func registerAll(_ hljs: HighlightJS) {
+        hljs.registerLanguage("1c", definition: lang1cLanguage)
+        hljs.registerLanguage("abnf", definition: abnfLanguage)
+        hljs.registerLanguage("accesslog", definition: accesslogLanguage)
+        hljs.registerLanguage("actionscript", definition: actionscriptLanguage)
+        hljs.registerLanguage("ada", definition: adaLanguage)
+        hljs.registerLanguage("angelscript", definition: angelscriptLanguage)
+        hljs.registerLanguage("apache", definition: apacheLanguage)
+        hljs.registerLanguage("applescript", definition: applescriptLanguage)
+        hljs.registerLanguage("arcade", definition: arcadeLanguage)
+        hljs.registerLanguage("arduino", definition: arduinoLanguage)
+        hljs.registerLanguage("armasm", definition: armasmLanguage)
+        hljs.registerLanguage("asciidoc", definition: asciidocLanguage)
+        hljs.registerLanguage("aspectj", definition: aspectjLanguage)
+        hljs.registerLanguage("autohotkey", definition: autohotkeyLanguage)
+        hljs.registerLanguage("autoit", definition: autoitLanguage)
+        hljs.registerLanguage("avrasm", definition: avrasmLanguage)
+        hljs.registerLanguage("awk", definition: awkLanguage)
+        hljs.registerLanguage("axapta", definition: axaptaLanguage)
+        hljs.registerLanguage("bash", definition: bashLanguage)
+        hljs.registerLanguage("basic", definition: basicLanguage)
+        hljs.registerLanguage("bnf", definition: bnfLanguage)
+        hljs.registerLanguage("brainfuck", definition: brainfuckLanguage)
+        hljs.registerLanguage("c", definition: cLanguage)
+        hljs.registerLanguage("cal", definition: calLanguage)
+        hljs.registerLanguage("capnproto", definition: capnprotoLanguage)
+        hljs.registerLanguage("ceylon", definition: ceylonLanguage)
+        hljs.registerLanguage("clean", definition: cleanLanguage)
+        hljs.registerLanguage("clojure", definition: clojureLanguage)
+        hljs.registerLanguage("clojure-repl", definition: clojure_replLanguage)
+        hljs.registerLanguage("cmake", definition: cmakeLanguage)
+        hljs.registerLanguage("coffeescript", definition: coffeescriptLanguage)
+        hljs.registerLanguage("coq", definition: coqLanguage)
+        hljs.registerLanguage("cos", definition: cosLanguage)
+        hljs.registerLanguage("cpp", definition: cppLanguage)
+        hljs.registerLanguage("crmsh", definition: crmshLanguage)
+        hljs.registerLanguage("crystal", definition: crystalLanguage)
+        hljs.registerLanguage("csharp", definition: csharpLanguage)
+        hljs.registerLanguage("csp", definition: cspLanguage)
+        hljs.registerLanguage("css", definition: cssLanguage)
+        hljs.registerLanguage("d", definition: dLanguage)
+        hljs.registerLanguage("dart", definition: dartLanguage)
+        hljs.registerLanguage("delphi", definition: delphiLanguage)
+        hljs.registerLanguage("diff", definition: diffLanguage)
+        hljs.registerLanguage("django", definition: djangoLanguage)
+        hljs.registerLanguage("dns", definition: dnsLanguage)
+        hljs.registerLanguage("dockerfile", definition: dockerfileLanguage)
+        hljs.registerLanguage("dos", definition: dosLanguage)
+        hljs.registerLanguage("dsconfig", definition: dsconfigLanguage)
+        hljs.registerLanguage("dts", definition: dtsLanguage)
+        hljs.registerLanguage("dust", definition: dustLanguage)
+        hljs.registerLanguage("ebnf", definition: ebnfLanguage)
+        hljs.registerLanguage("elixir", definition: elixirLanguage)
+        hljs.registerLanguage("elm", definition: elmLanguage)
+        hljs.registerLanguage("erb", definition: erbLanguage)
+        hljs.registerLanguage("erlang", definition: erlangLanguage)
+        hljs.registerLanguage("erlang-repl", definition: erlang_replLanguage)
+        hljs.registerLanguage("excel", definition: excelLanguage)
+        hljs.registerLanguage("fix", definition: fixLanguage)
+        hljs.registerLanguage("flix", definition: flixLanguage)
+        hljs.registerLanguage("fortran", definition: fortranLanguage)
+        hljs.registerLanguage("fsharp", definition: fsharpLanguage)
+        hljs.registerLanguage("gams", definition: gamsLanguage)
+        hljs.registerLanguage("gauss", definition: gaussLanguage)
+        hljs.registerLanguage("gcode", definition: gcodeLanguage)
+        hljs.registerLanguage("gherkin", definition: gherkinLanguage)
+        hljs.registerLanguage("glsl", definition: glslLanguage)
+        hljs.registerLanguage("gml", definition: gmlLanguage)
+        hljs.registerLanguage("go", definition: goLanguage)
+        hljs.registerLanguage("golo", definition: goloLanguage)
+        hljs.registerLanguage("gradle", definition: gradleLanguage)
+        hljs.registerLanguage("graphql", definition: graphqlLanguage)
+        hljs.registerLanguage("groovy", definition: groovyLanguage)
+        hljs.registerLanguage("handlebars", definition: handlebarsLanguage)
+        hljs.registerLanguage("haml", definition: hamlLanguage)
+        hljs.registerLanguage("haskell", definition: haskellLanguage)
+        hljs.registerLanguage("haxe", definition: haxeLanguage)
+        hljs.registerLanguage("hsp", definition: hspLanguage)
+        hljs.registerLanguage("http", definition: httpLanguage)
+        hljs.registerLanguage("hy", definition: hyLanguage)
+        hljs.registerLanguage("inform7", definition: inform7Language)
+        hljs.registerLanguage("ini", definition: iniLanguage)
+        hljs.registerLanguage("irpf90", definition: irpf90Language)
+        hljs.registerLanguage("isbl", definition: isblLanguage)
+        hljs.registerLanguage("java", definition: javaLanguage)
+        hljs.registerLanguage("javascript", definition: javascriptLanguage)
+        hljs.registerLanguage("jboss-cli", definition: jboss_cliLanguage)
+        hljs.registerLanguage("json", definition: jsonLanguage)
+        hljs.registerLanguage("julia", definition: juliaLanguage)
+        hljs.registerLanguage("julia-repl", definition: julia_replLanguage)
+        hljs.registerLanguage("kotlin", definition: kotlinLanguage)
+        hljs.registerLanguage("lasso", definition: lassoLanguage)
+        hljs.registerLanguage("latex", definition: latexLanguage)
+        hljs.registerLanguage("ldif", definition: ldifLanguage)
+        hljs.registerLanguage("leaf", definition: leafLanguage)
+        hljs.registerLanguage("less", definition: lessLanguage)
+        hljs.registerLanguage("lisp", definition: lispLanguage)
+        hljs.registerLanguage("livecodeserver", definition: livecodeserverLanguage)
+        hljs.registerLanguage("livescript", definition: livescriptLanguage)
+        hljs.registerLanguage("llvm", definition: llvmLanguage)
+        hljs.registerLanguage("lsl", definition: lslLanguage)
+        hljs.registerLanguage("lua", definition: luaLanguage)
+        hljs.registerLanguage("makefile", definition: makefileLanguage)
+        hljs.registerLanguage("markdown", definition: markdownLanguage)
+        hljs.registerLanguage("mathematica", definition: mathematicaLanguage)
+        hljs.registerLanguage("matlab", definition: matlabLanguage)
+        hljs.registerLanguage("maxima", definition: maximaLanguage)
+        hljs.registerLanguage("mel", definition: melLanguage)
+        hljs.registerLanguage("mercury", definition: mercuryLanguage)
+        hljs.registerLanguage("mipsasm", definition: mipsasmLanguage)
+        hljs.registerLanguage("mizar", definition: mizarLanguage)
+        hljs.registerLanguage("mojolicious", definition: mojoliciousLanguage)
+        hljs.registerLanguage("monkey", definition: monkeyLanguage)
+        hljs.registerLanguage("moonscript", definition: moonscriptLanguage)
+        hljs.registerLanguage("n1ql", definition: n1qlLanguage)
+        hljs.registerLanguage("nestedtext", definition: nestedtextLanguage)
+        hljs.registerLanguage("nginx", definition: nginxLanguage)
+        hljs.registerLanguage("nim", definition: nimLanguage)
+        hljs.registerLanguage("nix", definition: nixLanguage)
+        hljs.registerLanguage("node-repl", definition: node_replLanguage)
+        hljs.registerLanguage("nsis", definition: nsisLanguage)
+        hljs.registerLanguage("objectivec", definition: objectivecLanguage)
+        hljs.registerLanguage("ocaml", definition: ocamlLanguage)
+        hljs.registerLanguage("openscad", definition: openscadLanguage)
+        hljs.registerLanguage("oxygene", definition: oxygeneLanguage)
+        hljs.registerLanguage("parser3", definition: parser3Language)
+        hljs.registerLanguage("perl", definition: perlLanguage)
+        hljs.registerLanguage("pf", definition: pfLanguage)
+        hljs.registerLanguage("pgsql", definition: pgsqlLanguage)
+        hljs.registerLanguage("php", definition: phpLanguage)
+        hljs.registerLanguage("php-template", definition: php_templateLanguage)
+        hljs.registerLanguage("plaintext", definition: plaintextLanguage)
+        hljs.registerLanguage("pony", definition: ponyLanguage)
+        hljs.registerLanguage("processing", definition: processingLanguage)
+        hljs.registerLanguage("profile", definition: profileLanguage)
+        hljs.registerLanguage("prolog", definition: prologLanguage)
+        hljs.registerLanguage("properties", definition: propertiesLanguage)
+        hljs.registerLanguage("protobuf", definition: protobufLanguage)
+        hljs.registerLanguage("powershell", definition: powershellLanguage)
+        hljs.registerLanguage("puppet", definition: puppetLanguage)
+        hljs.registerLanguage("purebasic", definition: purebasicLanguage)
+        hljs.registerLanguage("python", definition: pythonLanguage)
+        hljs.registerLanguage("python-repl", definition: python_replLanguage)
+        hljs.registerLanguage("q", definition: qLanguage)
+        hljs.registerLanguage("qml", definition: qmlLanguage)
+        hljs.registerLanguage("r", definition: rLanguage)
+        hljs.registerLanguage("reasonml", definition: reasonmlLanguage)
+        hljs.registerLanguage("rib", definition: ribLanguage)
+        hljs.registerLanguage("roboconf", definition: roboconfLanguage)
+        hljs.registerLanguage("routeros", definition: routerosLanguage)
+        hljs.registerLanguage("rsl", definition: rslLanguage)
+        hljs.registerLanguage("ruby", definition: rubyLanguage)
+        hljs.registerLanguage("ruleslanguage", definition: ruleslanguageLanguage)
+        hljs.registerLanguage("rust", definition: rustLanguage)
+        hljs.registerLanguage("sas", definition: sasLanguage)
+        hljs.registerLanguage("scala", definition: scalaLanguage)
+        hljs.registerLanguage("scheme", definition: schemeLanguage)
+        hljs.registerLanguage("scilab", definition: scilabLanguage)
+        hljs.registerLanguage("scss", definition: scssLanguage)
+        hljs.registerLanguage("shell", definition: shellLanguage)
+        hljs.registerLanguage("smali", definition: smaliLanguage)
+        hljs.registerLanguage("smalltalk", definition: smalltalkLanguage)
+        hljs.registerLanguage("sml", definition: smlLanguage)
+        hljs.registerLanguage("sqf", definition: sqfLanguage)
+        hljs.registerLanguage("sql", definition: sqlLanguage)
+        hljs.registerLanguage("stan", definition: stanLanguage)
+        hljs.registerLanguage("stata", definition: stataLanguage)
+        hljs.registerLanguage("step21", definition: step21Language)
+        hljs.registerLanguage("stylus", definition: stylusLanguage)
+        hljs.registerLanguage("subunit", definition: subunitLanguage)
+        hljs.registerLanguage("swift", definition: swiftLanguage)
+        hljs.registerLanguage("taggerscript", definition: taggerscriptLanguage)
+        hljs.registerLanguage("tap", definition: tapLanguage)
+        hljs.registerLanguage("tcl", definition: tclLanguage)
+        hljs.registerLanguage("thrift", definition: thriftLanguage)
+        hljs.registerLanguage("tp", definition: tpLanguage)
+        hljs.registerLanguage("twig", definition: twigLanguage)
+        hljs.registerLanguage("typescript", definition: typescriptLanguage)
+        hljs.registerLanguage("vala", definition: valaLanguage)
+        hljs.registerLanguage("vbnet", definition: vbnetLanguage)
+        hljs.registerLanguage("vbscript", definition: vbscriptLanguage)
+        hljs.registerLanguage("vbscript-html", definition: vbscript_htmlLanguage)
+        hljs.registerLanguage("verilog", definition: verilogLanguage)
+        hljs.registerLanguage("vhdl", definition: vhdlLanguage)
+        hljs.registerLanguage("vim", definition: vimLanguage)
+        hljs.registerLanguage("wasm", definition: wasmLanguage)
+        hljs.registerLanguage("wren", definition: wrenLanguage)
+        hljs.registerLanguage("x86asm", definition: x86asmLanguage)
+        hljs.registerLanguage("xl", definition: xlLanguage)
+        hljs.registerLanguage("xml", definition: xmlLanguage)
+        hljs.registerLanguage("xquery", definition: xqueryLanguage)
+        hljs.registerLanguage("yaml", definition: yamlLanguage)
+        hljs.registerLanguage("zephir", definition: zephirLanguage)
+    }
+
+    /// Get the count of available languages
+    public static var count: Int { 192 }
+
+    /// List of all available language names
+    public static var all: [String] {
+        [
+            "1c", "abnf", "accesslog", "actionscript", "ada", "angelscript",
+            "apache", "applescript", "arcade", "arduino", "armasm", "asciidoc", "aspectj",
+            "autohotkey", "autoit", "avrasm", "awk", "axapta", "bash", "basic", "bnf",
+            "brainfuck", "c", "cal", "capnproto", "ceylon", "clean", "clojure",
+            "clojure-repl", "cmake", "coffeescript", "coq", "cos", "cpp", "crmsh", "crystal",
+            "csharp", "csp", "css", "d", "dart", "delphi", "diff", "django", "dns",
+            "dockerfile", "dos", "dsconfig", "dts", "dust", "ebnf", "elixir",
+            "elm", "erb", "erlang", "erlang-repl", "excel", "fix", "flix",
+            "fortran", "fsharp", "gams", "gauss", "gcode", "gherkin", "glsl", "gml", "go",
+            "golo", "gradle", "graphql", "groovy", "handlebars", "haml", "haskell",
+            "haxe", "hsp", "http", "hy", "inform7", "ini", "irpf90", "isbl", "java",
+            "javascript", "jboss-cli", "json", "julia", "julia-repl", "kotlin", "lasso",
+            "latex", "ldif", "leaf", "less", "lisp", "livecodeserver", "livescript",
+            "llvm", "lsl", "lua", "makefile", "markdown", "mathematica", "matlab", "maxima",
+            "mel", "mercury", "mipsasm", "mizar", "mojolicious", "monkey", "moonscript",
+            "n1ql", "nestedtext", "nginx", "nim", "nix", "node-repl", "nsis", "objectivec",
+            "ocaml", "openscad", "oxygene", "parser3", "perl", "pf", "pgsql",
+            "php", "php-template", "plaintext", "pony", "powershell", "processing", "profile",
+            "prolog", "properties", "protobuf", "puppet", "purebasic", "python",
+            "python-repl", "q", "qml", "r", "reasonml", "rib", "roboconf",
+            "routeros", "rsl", "ruby", "ruleslanguage", "rust", "sas", "scala",
+            "scheme", "scilab", "scss", "shell", "smali", "smalltalk", "sml", "sqf", "sql",
+            "stan", "stata", "step21", "stylus", "subunit", "swift", "taggerscript", "tap",
+            "tcl", "thrift", "tp", "twig", "typescript", "vala", "vbnet", "vbscript",
+            "vbscript-html", "verilog", "vhdl", "vim", "wasm", "wren", "x86asm", "xl",
+            "xml", "xquery", "yaml", "zephir"
+        ]
+    }
+}
