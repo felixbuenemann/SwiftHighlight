@@ -333,6 +333,32 @@ final class SwiftHighlightTests: XCTestCase {
     }
 
     @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
+    func testSwiftUIAttributedStringDebug() {
+        Languages.registerAll(hljs)
+
+        let code = "let x = 42"
+        let theme = Theme.githubDark
+
+        let attributed = hljs.highlightAttributedString(code, language: "swift", theme: theme)
+
+        print("=== DEBUG AttributedString ===")
+        print("Full string: '\(String(attributed.characters))'")
+
+        // Iterate through runs
+        for run in attributed.runs {
+            let text = String(attributed.characters[run.range])
+            print("Run: '\(text)'")
+            print("  - foregroundColor: \(String(describing: run.foregroundColor))")
+            if let color = run.foregroundColor {
+                let resolved = color.resolve(in: .init())
+                print("  - resolved RGB: (\(resolved.red), \(resolved.green), \(resolved.blue))")
+            }
+            print("  - font: \(String(describing: run.font))")
+        }
+        print("=== END DEBUG ===")
+    }
+
+    @available(macOS 12, iOS 15, tvOS 15, watchOS 8, *)
     func testSwiftUIAttributedStringUnknownLanguage() {
         Languages.registerAll(hljs)
 
