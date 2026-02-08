@@ -79,6 +79,13 @@ public class TokenTree {
         stack.removeLast()
     }
 
+    /// Close all currently open nodes.
+    public func closeAllNodes() {
+        while stack.count > 1 {
+            stack.removeLast()
+        }
+    }
+
     /// Add text to the current node
     public func add(_ text: String) {
         currentNode.addText(text)
@@ -126,11 +133,14 @@ public class TokenTreeEmitter {
 
     /// Add a sub-language result
     public func addSubLanguage(_ emitter: TokenTreeEmitter, language: String) {
-        let node = TokenNode()
-        node.language = language
-        // Copy children from sub-emitter
+        let node = TokenNode(scope: "language:\(language)")
         node.children = emitter.rootNode.children
         tree.currentNode.addNode(node)
+    }
+
+    /// Finalize and close any unclosed scopes.
+    public func finalize() {
+        tree.closeAllNodes()
     }
 
     /// Process keyword matches in the buffer

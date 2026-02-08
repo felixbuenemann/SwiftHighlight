@@ -72,6 +72,11 @@ public class HTMLRenderer {
                 .joined(separator: " ")
         }
 
+        // Handle sub-language scopes (e.g., "language:swift")
+        if resolvedScope.hasPrefix("language:") {
+            return resolvedScope.replacingOccurrences(of: "language:", with: "language-")
+        }
+
         // Handle dot-tiered scopes (e.g., "comment.line")
         if resolvedScope.contains(".") {
             let parts = resolvedScope.split(separator: ".")
@@ -84,7 +89,7 @@ public class HTMLRenderer {
 
             // Subsequent parts get underscore suffix treatment
             for i in 1..<parts.count {
-                classes.append(classPrefix + String(parts[i]) + "_")
+                classes.append(String(parts[i]) + String(repeating: "_", count: i))
             }
 
             return classes.joined(separator: " ")

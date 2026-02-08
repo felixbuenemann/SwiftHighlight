@@ -7,233 +7,160 @@ public enum RegexHelpers {
 
     // MARK: - Common Patterns
 
-    /// Identifier pattern: starts with letter, followed by word characters
     public static let IDENT_RE = "[a-zA-Z]\\w*"
-
-    /// Identifier with underscore prefix allowed
     public static let UNDERSCORE_IDENT_RE = "[a-zA-Z_]\\w*"
-
-    /// Simple number pattern
     public static let NUMBER_RE = "\\b\\d+(\\.\\d+)?"
-
-    /// C-style number pattern (hex, octal, decimal, float)
     public static let C_NUMBER_RE = "(-?)(\\b0[xX][a-fA-F0-9]+|(\\b\\d+(\\.\\d*)?|\\.\\d+)([eE][-+]?\\d+)?)"
-
-    /// Binary number pattern
     public static let BINARY_NUMBER_RE = "\\b(0b[01]+)"
-
-    /// C-style regex mode pattern
     public static let RE_STARTERS_RE = "!|!=|!==|%|%=|&|&&|&=|\\*|\\*=|\\+|\\+=|,|-|-=|/=|/|:|;|<<|<<=|<=|<|===|==|=|>>>=|>>=|>=|>>>|>>|>|\\?|\\[|\\{|\\(|\\^|\\^=|\\||\\|=|\\|\\||~"
 
     // MARK: - Source Extraction
 
-    /// Extract the pattern string from a regex or return the string as-is
     public static func source(_ pattern: PatternLike) -> String {
-        return pattern.asString
+        pattern.asString
     }
 
-    /// Extract the pattern string from a regex string
     public static func source(_ pattern: String) -> String {
-        return pattern
+        pattern
     }
 
     // MARK: - Pattern Combination
 
-    /// Concatenate multiple patterns
     public static func concat(_ patterns: PatternLike...) -> String {
-        return patterns.map { source($0) }.joined()
+        patterns.map { source($0) }.joined()
     }
 
-    /// Concatenate multiple pattern strings
     public static func concat(_ patterns: String...) -> String {
-        return patterns.joined()
+        patterns.joined()
     }
 
-    /// Concatenate an array of patterns
     public static func concat(_ patterns: [String]) -> String {
-        return patterns.joined()
+        patterns.joined()
     }
 
-    /// Create an alternation (either) pattern
     public static func either(_ patterns: PatternLike...) -> String {
-        return "(?:" + patterns.map { source($0) }.joined(separator: "|") + ")"
+        "(?:" + patterns.map { source($0) }.joined(separator: "|") + ")"
     }
 
-    /// Create an alternation from an array of strings
     public static func either(_ patterns: [String]) -> String {
-        return "(?:" + patterns.joined(separator: "|") + ")"
+        "(?:" + patterns.joined(separator: "|") + ")"
     }
 
-    /// Create a positive lookahead
     public static func lookahead(_ pattern: PatternLike) -> String {
-        return "(?=" + source(pattern) + ")"
+        "(?=" + source(pattern) + ")"
     }
 
-    /// Create a positive lookahead from a string
     public static func lookahead(_ pattern: String) -> String {
-        return "(?=" + pattern + ")"
+        "(?=" + pattern + ")"
     }
 
-    /// Create a negative lookahead
     public static func negativeLookahead(_ pattern: String) -> String {
-        return "(?!" + pattern + ")"
+        "(?!" + pattern + ")"
     }
 
-    /// Make a pattern optional
     public static func optional(_ pattern: PatternLike) -> String {
-        return "(?:" + source(pattern) + ")?"
+        "(?:" + source(pattern) + ")?"
     }
 
-    /// Make a pattern optional from string
     public static func optional(_ pattern: String) -> String {
-        return "(?:" + pattern + ")?"
+        "(?:" + pattern + ")?"
     }
 
-    /// Make a pattern repeatable (zero or more)
     public static func anyNumberOfTimes(_ pattern: PatternLike) -> String {
-        return "(?:" + source(pattern) + ")*"
+        "(?:" + source(pattern) + ")*"
     }
 
-    /// Make a pattern repeatable from string
     public static func anyNumberOfTimes(_ pattern: String) -> String {
-        return "(?:" + pattern + ")*"
+        "(?:" + pattern + ")*"
     }
 
     // MARK: - Group Counting
 
-    /// Count the number of capturing groups in a regex pattern
+    /// Count capture groups with the same trick as highlight.js.
     public static func countMatchGroups(_ pattern: String) -> Int {
-        // Count '(' that are not:
-        // - escaped: '\('
-        // - non-capturing: '(?:'
-        // - lookahead/lookbehind: '(?=' '(?!' '(?<=' '(?<!'
-        // - named groups: '(?<name>'
-
-        var count = 0
-        var i = pattern.startIndex
-
-        while i < pattern.endIndex {
-            let char = pattern[i]
-
-            if char == "\\" && pattern.index(after: i) < pattern.endIndex {
-                // Skip escaped character
-                i = pattern.index(i, offsetBy: 2)
-                continue
+        do {
+            let regex = try NSRegularExpression(pattern: pattern + "|", options: [])
+            let range = NSRange(location: 0, length: 0)
+            if let match = regex.firstMatch(in: "", options: [], range: range) {
+                return max(0, match.numberOfRanges - 1)
             }
-
-            if char == "(" {
-                let nextIndex = pattern.index(after: i)
-                if nextIndex < pattern.endIndex && pattern[nextIndex] == "?" {
-                    // Non-capturing or special group
-                    let afterQuestion = pattern.index(after: nextIndex)
-                    if afterQuestion < pattern.endIndex {
-                        let special = pattern[afterQuestion]
-                        if special == ":" || special == "=" || special == "!" || special == "<" {
-                            // Check if it's a lookbehind (<?= or <?!) or named group (<?name>)
-                            if special == "<" {
-                                let afterLess = pattern.index(after: afterQuestion)
-                                if afterLess < pattern.endIndex {
-                                    let next = pattern[afterLess]
-                                    if next == "=" || next == "!" {
-                                        // Lookbehind - not a capturing group
-                                        i = pattern.index(after: i)
-                                        continue
-                                    }
-                                    // Named group - IS a capturing group
-                                    count += 1
-                                    i = pattern.index(after: i)
-                                    continue
-                                }
-                            }
-                            // Non-capturing or lookahead
-                            i = pattern.index(after: i)
-                            continue
-                        }
-                    }
-                }
-                // Regular capturing group
-                count += 1
-            }
-
-            i = pattern.index(after: i)
+        } catch {
+            return 0
         }
-
-        return count
+        return 0
     }
 
     // MARK: - Backreference Rewriting
 
-    /// Rewrite backreferences when combining multiple regexes
-    /// When we join regex patterns, backreferences need to be adjusted
+    private static let backrefRegex: NSRegularExpression = {
+        // Mirrors highlight.js BACKREF_RE
+        // [character class] | ( or (? | \\1+ | escaped char
+        let pattern = "\\[(?:[^\\\\\\]]|\\\\.)*\\]|\\(\\??|\\\\([1-9][0-9]*)|\\\\."
+        // Never fatal in practice; keep deterministic fallback.
+        return (try? NSRegularExpression(pattern: pattern, options: []))
+            ?? (try! NSRegularExpression(pattern: "\\\\.", options: []))
+    }()
+
+    /// Rewrites backreferences when combining regexes (highlight.js `_rewriteBackreferences`).
     public static func rewriteBackreferences(_ patterns: [String], joinWith: String = "|") -> String {
         var numCaptures = 0
-        var results: [String] = []
+        var rewritten: [String] = []
 
         for pattern in patterns {
-            numCaptures += 1  // Account for the wrapping group
-            let adjustedPattern = adjustBackreferences(pattern, offset: numCaptures)
-            numCaptures += countMatchGroups(pattern)
-            results.append("(" + adjustedPattern + ")")
-        }
+            numCaptures += 1
+            let offset = numCaptures
+            var remaining = pattern
+            var out = ""
 
-        return results.joined(separator: joinWith)
-    }
+            while !remaining.isEmpty {
+                let ns = remaining as NSString
+                let searchRange = NSRange(location: 0, length: ns.length)
+                guard let match = backrefRegex.firstMatch(in: remaining, options: [], range: searchRange) else {
+                    out += remaining
+                    break
+                }
 
-    /// Adjust backreferences in a pattern by an offset
-    private static func adjustBackreferences(_ pattern: String, offset: Int) -> String {
-        guard offset > 0 else { return pattern }
+                if match.range.location > 0 {
+                    out += ns.substring(with: NSRange(location: 0, length: match.range.location))
+                }
 
-        var result = ""
-        var i = pattern.startIndex
+                let token = ns.substring(with: match.range)
+                let nextStart = match.range.location + match.range.length
+                remaining = ns.substring(from: nextStart)
 
-        while i < pattern.endIndex {
-            let char = pattern[i]
-
-            if char == "\\" && pattern.index(after: i) < pattern.endIndex {
-                let nextIndex = pattern.index(after: i)
-                let nextChar = pattern[nextIndex]
-
-                if nextChar.isNumber {
-                    // Found a backreference
-                    var numStr = String(nextChar)
-                    var numEndIndex = pattern.index(after: nextIndex)
-
-                    // Collect all digits
-                    while numEndIndex < pattern.endIndex && pattern[numEndIndex].isNumber {
-                        numStr.append(pattern[numEndIndex])
-                        numEndIndex = pattern.index(after: numEndIndex)
-                    }
-
-                    if let num = Int(numStr), num > 0 {
-                        // Adjust the backreference
-                        result += "\\" + String(num + offset)
-                        i = numEndIndex
+                let backrefGroup = match.range(at: 1)
+                if token.first == "\\", backrefGroup.location != NSNotFound {
+                    let backrefValue = ns.substring(with: backrefGroup)
+                    if let original = Int(backrefValue) {
+                        out += "\\\\" + String(original + offset)
                         continue
                     }
                 }
 
-                // Regular escaped character
-                result.append(char)
-                result.append(nextChar)
-                i = pattern.index(after: nextIndex)
-                continue
+                out += token
+                if token == "(" {
+                    numCaptures += 1
+                }
             }
 
-            result.append(char)
-            i = pattern.index(after: i)
+            rewritten.append("(" + out + ")")
         }
 
-        return result
+        return rewritten.joined(separator: joinWith)
     }
 
     // MARK: - Regex Compilation
 
-    /// Compile a pattern string to NSRegularExpression
-    public static func compile(_ pattern: String, caseInsensitive: Bool = false) throws -> NSRegularExpression {
+    public static func compile(
+        _ pattern: String,
+        caseInsensitive: Bool = false,
+        unicodeRegex: Bool = false
+    ) throws -> NSRegularExpression {
         var options: NSRegularExpression.Options = [.anchorsMatchLines]
         if caseInsensitive {
             options.insert(.caseInsensitive)
         }
+        _ = unicodeRegex // NSRegularExpression is unicode-aware by default.
 
         do {
             return try NSRegularExpression(pattern: pattern, options: options)
@@ -242,18 +169,15 @@ public enum RegexHelpers {
         }
     }
 
-    /// Test if a pattern matches at the start of a string
-    public static func startsWith(_ regex: NSRegularExpression, _ string: String, at position: Int = 0) -> Bool {
-        let range = NSRange(location: position, length: string.utf16.count - position)
-        guard let match = regex.firstMatch(in: string, options: [], range: range) else {
-            return false
-        }
-        return match.range.location == position
+    public static func startsWith(_ regex: NSRegularExpression?, _ string: String, at position: Int = 0) -> Bool {
+        guard let regex else { return false }
+        guard let match = exec(regex, string, from: position) else { return false }
+        return match.index == position
     }
 
-    /// Find a match in a string starting at a given position
     public static func exec(_ regex: NSRegularExpression, _ string: String, from position: Int = 0) -> MatchData? {
         let nsString = string as NSString
+        guard position <= nsString.length else { return nil }
         let range = NSRange(location: position, length: nsString.length - position)
 
         guard let match = regex.firstMatch(in: string, options: [], range: range) else {
@@ -273,103 +197,113 @@ public enum RegexHelpers {
 
     // MARK: - Pattern Validation
 
-    /// Escape a string for use in a regex pattern
     public static func escape(_ string: String) -> String {
-        return NSRegularExpression.escapedPattern(for: string)
+        NSRegularExpression.escapedPattern(for: string)
     }
 
-    /// Check if a pattern is valid
     public static func isValid(_ pattern: String) -> Bool {
-        do {
-            _ = try NSRegularExpression(pattern: pattern, options: [])
-            return true
-        } catch {
-            return false
-        }
+        (try? NSRegularExpression(pattern: pattern, options: [])) != nil
     }
 }
 
 // MARK: - Multi-Regex
 
-/// Combines multiple regex patterns into a single alternation with tracking
-public class MultiRegex {
-    private var regexes: [(pattern: String, metadata: MatchMetadata)] = []
-    private var combinedRegex: NSRegularExpression?
-    private var lastIndex: Int = 0
+/// Multi-regex implementation mirroring highlight.js internals.
+public final class MultiRegex {
+    private var matchIndexes: [Int: MatchMetadata] = [:]
+    private var regexes: [String] = []
+    private var matchAt = 1
+    private var position = 0
+
+    private var matcherRegex: NSRegularExpression?
+
+    public var lastIndex: Int = 0
     private let caseInsensitive: Bool
+    private let unicodeRegex: Bool
 
     public struct MatchMetadata {
         public let rule: Int
         public let type: MatchType
+        public let position: Int
 
-        public init(rule: Int, type: MatchType = .begin) {
+        public init(rule: Int, type: MatchType = .begin, position: Int = 0) {
             self.rule = rule
             self.type = type
+            self.position = position
         }
     }
 
-    public init(caseInsensitive: Bool = false) {
+    public init(caseInsensitive: Bool = false, unicodeRegex: Bool = false) {
         self.caseInsensitive = caseInsensitive
+        self.unicodeRegex = unicodeRegex
     }
 
-    /// Add a regex pattern with metadata
     public func addRule(_ pattern: String, metadata: MatchMetadata) {
-        regexes.append((pattern, metadata))
-        combinedRegex = nil  // Invalidate cache
+        let tagged = MatchMetadata(rule: metadata.rule, type: metadata.type, position: position)
+        position += 1
+
+        matchIndexes[matchAt] = tagged
+        regexes.append(pattern)
+        matchAt += RegexHelpers.countMatchGroups(pattern) + 1
+        matcherRegex = nil
     }
 
-    /// Compile all regexes into a combined pattern
     public func compile() throws {
-        guard !regexes.isEmpty else { return }
+        guard !regexes.isEmpty else {
+            matcherRegex = nil
+            return
+        }
 
-        let combined = RegexHelpers.rewriteBackreferences(regexes.map { $0.pattern })
-        combinedRegex = try RegexHelpers.compile(combined, caseInsensitive: caseInsensitive)
+        let combined = RegexHelpers.rewriteBackreferences(regexes, joinWith: "|")
+        matcherRegex = try RegexHelpers.compile(
+            combined,
+            caseInsensitive: caseInsensitive,
+            unicodeRegex: unicodeRegex
+        )
+        lastIndex = 0
     }
 
-    /// Find the next match starting from the given position
-    public func exec(_ string: String, from position: Int = 0) -> (match: MatchData, metadata: MatchMetadata)? {
-        guard let regex = combinedRegex else { return nil }
-
-        guard let matchData = RegexHelpers.exec(regex, string, from: position) else {
+    public func exec(_ string: String) -> (match: MatchData, metadata: MatchMetadata)? {
+        guard let matcherRegex else { return nil }
+        guard var matchData = RegexHelpers.exec(matcherRegex, string, from: lastIndex) else {
             return nil
         }
 
-        // Find which sub-pattern matched by checking which group is non-nil
-        var groupOffset = 1
+        for groupIndex in 1..<matchData.match.numberOfRanges {
+            let range = matchData.match.range(at: groupIndex)
+            guard range.location != NSNotFound else { continue }
+            guard let metadata = matchIndexes[groupIndex] else { continue }
 
-        for (index, (pattern, metadata)) in regexes.enumerated() {
-            let groupRange = matchData.match.range(at: groupOffset)
-            if groupRange.location != NSNotFound {
-                var result = matchData
-                result.rule = index
-                result.type = metadata.type
-                return (result, metadata)
+            matchData.rule = metadata.rule
+            matchData.type = metadata.type
+            matchData.groupOffset = groupIndex
+            if let selected = matchData.group(0) {
+                matchData.text = selected
             }
-            groupOffset += 1 + RegexHelpers.countMatchGroups(pattern)
+            return (matchData, metadata)
         }
 
         return nil
     }
 
-    /// Reset to allow fresh matching
-    public func reset() {
-        lastIndex = 0
-    }
-
     public var isEmpty: Bool {
-        return regexes.isEmpty
+        regexes.isEmpty
     }
 }
 
 // MARK: - Resumable Multi-Regex
 
-/// A multi-regex that can resume from a specific rule index
-/// This is used when a match is ignored and we need to try remaining rules at the same position
-public class ResumableMultiRegex {
+/// A multi-regex that can resume scanning at the same source position.
+public final class ResumableMultiRegex {
     private var rules: [(pattern: String, metadata: RuleMetadata)] = []
     private var multiRegexCache: [Int: MultiRegex] = [:]
-    private var regexIndex: Int = 0
+    private var beginRuleCount = 0
+
+    public var lastIndex: Int = 0
+    public private(set) var regexIndex: Int = 0
+
     private let caseInsensitive: Bool
+    private let unicodeRegex: Bool
 
     public struct RuleMetadata {
         public let rule: CompiledMode
@@ -386,75 +320,94 @@ public class ResumableMultiRegex {
         public let rule: CompiledMode
         public let type: MatchType
         public let ruleIndex: Int
+        public let position: Int
     }
 
-    public init(caseInsensitive: Bool = false) {
+    public init(caseInsensitive: Bool = false, unicodeRegex: Bool = false) {
         self.caseInsensitive = caseInsensitive
+        self.unicodeRegex = unicodeRegex
     }
 
-    /// Add a rule with its pattern and metadata
-    public func addRule(_ pattern: String, rule: CompiledMode, type: MatchType = .begin) {
-        rules.append((pattern, RuleMetadata(rule: rule, type: type)))
-        multiRegexCache.removeAll()  // Invalidate cache
-    }
-
-    /// Get or create a multi-regex starting from the given index
-    private func getMultiRegex(from startIndex: Int) throws -> MultiRegex? {
+    private func getMatcher(from startIndex: Int) throws -> MultiRegex? {
         if let cached = multiRegexCache[startIndex] {
             return cached
         }
 
         guard startIndex < rules.count else { return nil }
 
-        let multiRegex = MultiRegex(caseInsensitive: caseInsensitive)
-        for i in startIndex..<rules.count {
-            let (pattern, metadata) = rules[i]
-            multiRegex.addRule(pattern, metadata: MultiRegex.MatchMetadata(rule: i, type: metadata.type))
+        let matcher = MultiRegex(caseInsensitive: caseInsensitive, unicodeRegex: unicodeRegex)
+        for idx in startIndex..<rules.count {
+            let (pattern, metadata) = rules[idx]
+            matcher.addRule(
+                pattern,
+                metadata: MultiRegex.MatchMetadata(rule: idx, type: metadata.type)
+            )
         }
-        try multiRegex.compile()
+        try matcher.compile()
 
-        multiRegexCache[startIndex] = multiRegex
-        return multiRegex
+        multiRegexCache[startIndex] = matcher
+        return matcher
     }
 
-    /// Reset to consider all rules
+    public func resumingScanAtSamePosition() -> Bool {
+        regexIndex != 0
+    }
+
     public func considerAll() {
         regexIndex = 0
     }
 
-    /// Execute and find the next match
+    public func addRule(_ pattern: String, rule: CompiledMode, type: MatchType = .begin) {
+        rules.append((pattern, RuleMetadata(rule: rule, type: type)))
+        if type == .begin {
+            beginRuleCount += 1
+        }
+        multiRegexCache.removeAll()
+    }
+
     public func exec(_ string: String, from position: Int = 0) throws -> MatchResult? {
-        guard let multiRegex = try getMultiRegex(from: regexIndex) else {
+        lastIndex = position
+
+        guard let matcher = try getMatcher(from: regexIndex) else {
             return nil
         }
 
-        guard let (matchData, _) = multiRegex.exec(string, from: position) else {
+        matcher.lastIndex = lastIndex
+        var result = matcher.exec(string)
+
+        if resumingScanAtSamePosition() {
+            if let result, result.match.index == lastIndex {
+                // Keep resumed match.
+            } else {
+                guard let fullMatcher = try getMatcher(from: 0) else { return nil }
+                let nsString = string as NSString
+                fullMatcher.lastIndex = min(lastIndex + 1, nsString.length)
+                result = fullMatcher.exec(string)
+            }
+        }
+
+        guard let (matchData, metadata) = result else {
             return nil
         }
 
-        let ruleIndex = matchData.rule + regexIndex
-        guard ruleIndex < rules.count else { return nil }
-
-        let (_, metadata) = rules[ruleIndex]
-
-        // Prepare for potential resumption
-        if matchData.index == position {
-            // Match at current position - if ignored, start from next rule
-            regexIndex = ruleIndex + 1
-        } else {
-            // Match ahead - reset for next call
-            regexIndex = 0
+        regexIndex += metadata.position + 1
+        if regexIndex == beginRuleCount {
+            considerAll()
         }
+
+        guard matchData.rule < rules.count else { return nil }
+        let selected = rules[matchData.rule].metadata
 
         return MatchResult(
             match: matchData,
-            rule: metadata.rule,
-            type: metadata.type,
-            ruleIndex: ruleIndex
+            rule: selected.rule,
+            type: selected.type,
+            ruleIndex: matchData.rule,
+            position: metadata.position
         )
     }
 
     public var isEmpty: Bool {
-        return rules.isEmpty
+        rules.isEmpty
     }
 }

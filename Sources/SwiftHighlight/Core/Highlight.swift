@@ -2,81 +2,121 @@ import Foundation
 
 // MARK: - HighlightJS
 
-/// The main syntax highlighter class - Swift port of highlight.js
-/// This provides the public API for syntax highlighting
-public class HighlightJS {
+/// Main Swift highlighter engine (state machine port of highlight.js core).
+public final class HighlightJS {
 
-    /// Singleton instance for convenience
     public static let shared = HighlightJS()
 
-    /// Registered language definitions
     private var languages: [String: LanguageDefinition] = [:]
-
-    /// Compiled language cache
     private var compiledLanguages: [String: CompiledLanguage] = [:]
-
-    /// Language name aliases
     private var aliases: [String: String] = [:]
+    private var allAliasesResolved = false
 
-    /// Global configuration options
     public var options: HighlightOptions
-
-    /// Safe mode - recover from errors instead of throwing
     public var safeMode: Bool = true
 
-    /// Regex helper instance for use by language definitions
+    /// Regex helper API used by language definitions.
     public let regex = RegexHelper()
 
-    /// Initialize a new highlighter
+    private let maxKeywordHits = 7
+
     public init(options: HighlightOptions = HighlightOptions()) {
         self.options = options
     }
 
     // MARK: - Language Registration
 
-    /// Register a language with a definition function
     public func registerLanguage(_ name: String, definition: @escaping LanguageDefinition) {
-        languages[name] = definition
-        compiledLanguages.removeValue(forKey: name)
+        let key = name.lowercased()
+        languages[key] = definition
+        compiledLanguages.removeValue(forKey: key)
+
+        // Remove aliases pointing at a replaced language.
+        aliases = aliases.filter { $0.value != key }
+        allAliasesResolved = false
     }
 
-    /// Register a language with a pre-built Language object
     public func registerLanguage(_ name: String, language: Language) {
         registerLanguage(name) { _ in language }
     }
 
-    /// Register an alias for a language
     public func registerAliases(_ names: [String], forLanguage languageName: String) {
+        let target = languageName.lowercased()
         for alias in names {
-            aliases[alias] = languageName
+            aliases[alias.lowercased()] = target
         }
     }
 
-    /// Get a compiled language by name (resolves aliases)
     public func getLanguage(_ name: String) -> CompiledLanguage? {
-        let resolvedName = aliases[name] ?? name
+        let normalized = normalizeLanguageName(name)
+        if let compiled = getLanguageDirect(normalized) {
+            return compiled
+        }
 
-        // Check cache
+        if !allAliasesResolved {
+            resolveAllAliases()
+            let resolved = aliases[normalized] ?? normalized
+            return getLanguageDirect(resolved)
+        }
+
+        return nil
+    }
+
+    public func hasLanguage(_ name: String) -> Bool {
+        let normalized = normalizeLanguageName(name)
+        let resolved = aliases[normalized] ?? normalized
+        if languages[resolved] != nil {
+            return true
+        }
+
+        if !allAliasesResolved {
+            resolveAllAliases()
+            let resolvedAfter = aliases[normalized] ?? normalized
+            return languages[resolvedAfter] != nil
+        }
+
+        return false
+    }
+
+    public func listLanguages() -> [String] {
+        Array(languages.keys).sorted()
+    }
+
+    public func autoDetection(_ name: String) -> Bool {
+        guard let language = getLanguage(name) else { return false }
+        return !language.disableAutodetect
+    }
+
+    private func normalizeLanguageName(_ name: String) -> String {
+        name.lowercased()
+    }
+
+    private func getLanguageDirect(_ normalizedName: String) -> CompiledLanguage? {
+        let resolvedName = aliases[normalizedName] ?? normalizedName
+
         if let cached = compiledLanguages[resolvedName] {
             return cached
         }
 
-        // Compile if we have a definition
         guard let definition = languages[resolvedName] else {
             return nil
         }
 
         do {
             let language = definition(self)
+            if language.name.isEmpty {
+                language.name = resolvedName
+            }
+
+            if !language.aliases.isEmpty {
+                for alias in language.aliases {
+                    aliases[alias.lowercased()] = resolvedName
+                }
+            }
+
             let compiler = ModeCompiler(language: language)
             let compiled = try compiler.compile()
             compiledLanguages[resolvedName] = compiled
-
-            // Register aliases from the language definition
-            for alias in language.aliases {
-                aliases[alias] = resolvedName
-            }
-
             return compiled
         } catch {
             if !safeMode {
@@ -86,35 +126,28 @@ public class HighlightJS {
         }
     }
 
-    /// Check if a language is registered
-    public func hasLanguage(_ name: String) -> Bool {
-        let resolvedName = aliases[name] ?? name
-        return languages[resolvedName] != nil
-    }
-
-    /// List all registered language names
-    public func listLanguages() -> [String] {
-        return Array(languages.keys).sorted()
-    }
-
-    /// Check if auto-detection is enabled for a language
-    public func autoDetection(_ name: String) -> Bool {
-        guard let language = getLanguage(name) else { return false }
-        return !language.disableAutodetect
+    private func resolveAllAliases() {
+        allAliasesResolved = true
+        for (name, definition) in languages where compiledLanguages[name] == nil {
+            let language = definition(self)
+            for alias in language.aliases {
+                aliases[alias.lowercased()] = name
+            }
+        }
     }
 
     // MARK: - Highlighting
 
-    /// Highlight code with a specific language
     public func highlight(
         _ code: String,
         language: String,
         ignoreIllegals: Bool? = nil
     ) -> HighlightResult {
         let shouldIgnoreIllegals = ignoreIllegals ?? options.ignoreIllegals
+        let requestedName = normalizeLanguageName(language)
+        let resolvedName = aliases[requestedName] ?? requestedName
 
-        guard let compiledLanguage = getLanguage(language) else {
-            // Unknown language - return escaped code
+        guard let compiledLanguage = getLanguageDirect(resolvedName) else {
             return HighlightResult(
                 value: escapeHTML(code),
                 language: nil,
@@ -125,272 +158,98 @@ public class HighlightJS {
         }
 
         do {
-            return try highlightInternal(
+            var result = try highlightInternal(
+                languageName: resolvedName,
                 code: code,
                 language: compiledLanguage,
-                ignoreIllegals: shouldIgnoreIllegals
+                ignoreIllegals: shouldIgnoreIllegals,
+                continuation: nil
             )
+            result.code = code
+            return result
         } catch {
-            if safeMode {
-                return HighlightResult(
-                    value: escapeHTML(code),
-                    language: language,
-                    relevance: 0,
-                    illegal: true,
-                    code: code
-                )
-            } else {
-                // Re-throw in non-safe mode
-                return HighlightResult(
-                    value: escapeHTML(code),
-                    language: language,
-                    relevance: 0,
-                    illegal: true,
-                    code: code
-                )
-            }
+            return HighlightResult(
+                value: escapeHTML(code),
+                language: resolvedName,
+                relevance: 0,
+                illegal: true,
+                code: code
+            )
         }
     }
 
-    /// Auto-detect language and highlight
     public func highlightAuto(
         _ code: String,
         languageSubset: [String]? = nil
     ) -> AutoHighlightResult {
         let subset = languageSubset ?? options.languageSubset ?? listLanguages()
 
-        var bestResult: HighlightResult?
-        var secondBestResult: HighlightResult?
-        var bestRelevance: Double = -1
+        var results: [HighlightResult] = [justTextHighlightResult(code)]
 
         for languageName in subset {
             guard autoDetection(languageName) else { continue }
+            guard let resolved = resolveRegisteredLanguageName(languageName) else { continue }
+            guard let language = getLanguageDirect(resolved) else { continue }
 
-            let result = highlight(code, language: languageName, ignoreIllegals: false)
-
-            if result.relevance > bestRelevance {
-                secondBestResult = bestResult
-                bestResult = result
-                bestRelevance = result.relevance
-            } else if result.relevance == bestRelevance && bestResult != nil {
-                // Same relevance - keep both
-                secondBestResult = result
+            do {
+                let result = try highlightInternal(
+                    languageName: resolved,
+                    code: code,
+                    language: language,
+                    ignoreIllegals: false,
+                    continuation: nil
+                )
+                results.append(result)
+            } catch {
+                continue
             }
         }
 
-        // If no good match, return plain text
-        if bestResult == nil || bestRelevance == 0 {
-            let plainResult = HighlightResult(
-                value: escapeHTML(code),
-                language: nil,
-                relevance: 0,
-                illegal: false,
-                code: code
-            )
-            return AutoHighlightResult(result: plainResult, secondBest: nil)
+        let sorted = results.sorted { lhs, rhs in
+            if lhs.relevance != rhs.relevance {
+                return lhs.relevance > rhs.relevance
+            }
+
+            if let leftLang = lhs.language,
+               let rightLang = rhs.language,
+               let leftCompiled = getLanguageDirect(leftLang),
+               let rightCompiled = getLanguageDirect(rightLang),
+               let leftRaw = leftCompiled.rawDefinition,
+               let rightRaw = rightCompiled.rawDefinition {
+                if leftRaw.supersetOf == rightLang { return false }
+                if rightRaw.supersetOf == leftLang { return true }
+            }
+
+            return false
         }
 
-        return AutoHighlightResult(result: bestResult!, secondBest: secondBestResult)
+        let best = sorted.first ?? justTextHighlightResult(code)
+        let secondBest = sorted.count > 1 ? sorted[1] : nil
+        return AutoHighlightResult(result: best, secondBest: secondBest)
     }
 
-    // MARK: - Internal Highlighting
+    private func resolveRegisteredLanguageName(_ name: String) -> String? {
+        let normalized = normalizeLanguageName(name)
+        if languages[normalized] != nil {
+            return normalized
+        }
+        if let resolved = aliases[normalized] {
+            return resolved
+        }
+        return nil
+    }
 
-    /// The main highlighting loop
-    private func highlightInternal(
-        code: String,
-        language: CompiledLanguage,
-        ignoreIllegals: Bool,
-        continuation: CompiledMode? = nil
-    ) throws -> HighlightResult {
+    private func justTextHighlightResult(_ code: String) -> HighlightResult {
         let emitter = TokenTreeEmitter(
             classPrefix: options.classPrefix,
-            classNameAliases: language.classNameAliases
+            classNameAliases: nil
         )
-
-        var relevance: Double = 0
-        var modeBuffer = ""
-        var top: CompiledMode = continuation ?? language
-        var index = 0
-
-        // Stack for tracking nested modes
-        var modeStack: [CompiledMode] = [top]
-
-        // Process the code character by character with regex matching
-        let nsCode = code as NSString
-
-        while index < nsCode.length {
-            // Try to find the next match using the mode's matcher
-            let remainingCode = nsCode.substring(from: index)
-
-            if let match = try findNextMatch(
-                in: remainingCode,
-                for: top,
-                fullCode: code,
-                offset: index
-            ) {
-                let beforeMatch = nsCode.substring(with: NSRange(location: index, length: match.index - index))
-
-                // Process text before the match
-                if !beforeMatch.isEmpty {
-                    modeBuffer += beforeMatch
-                }
-
-                // Process keywords in buffer before switching modes
-                if !modeBuffer.isEmpty && top.keywords != nil {
-                    relevance += emitter.processKeywords(
-                        modeBuffer,
-                        keywords: top.keywords,
-                        keywordPattern: top.keywordPatternRe
-                    )
-                } else if !modeBuffer.isEmpty {
-                    emitter.addText(modeBuffer)
-                }
-                modeBuffer = ""
-
-                // Handle the match based on type
-                switch match.type {
-                case .begin:
-                    // Check callback
-                    if let onBegin = match.rule.onBegin {
-                        let response = Response(mode: match.rule)
-                        onBegin(match.matchData, response)
-                        if response.isMatchIgnored {
-                            modeBuffer += match.matchData.fullMatch
-                            index = match.index + match.matchData.fullMatch.count
-                            continue
-                        }
-                    }
-
-                    // Start new mode
-                    let newMode = match.rule
-
-                    // Emit begin scope if configured
-                    if let beginScope = newMode.beginScope, !newMode.excludeBegin {
-                        if case .single(let scope) = beginScope {
-                            emitter.startScope(scope)
-                            emitter.addText(match.matchData.fullMatch)
-                            emitter.endScope()
-                        } else if case .multi(let scopes) = beginScope {
-                            emitMultiClass(match.matchData, scopes: scopes, emitter: emitter)
-                        }
-                    } else if let scope = newMode.scope, !newMode.excludeBegin {
-                        emitter.startScope(scope)
-                        if !newMode.returnBegin {
-                            emitter.addText(match.matchData.fullMatch)
-                        }
-                    }
-
-                    // Push mode onto stack
-                    top = newMode
-                    modeStack.append(top)
-
-                    relevance += newMode.relevance
-
-                case .end:
-                    // Check if we can end this mode
-                    guard modeStack.count > 1 else {
-                        // Can't end root mode
-                        modeBuffer += match.matchData.fullMatch
-                        index = match.index + match.matchData.fullMatch.count
-                        continue
-                    }
-
-                    // Check callback
-                    if let onEnd = top.onEnd {
-                        let response = Response(mode: top)
-                        onEnd(match.matchData, response)
-                        if response.isMatchIgnored {
-                            modeBuffer += match.matchData.fullMatch
-                            index = match.index + match.matchData.fullMatch.count
-                            continue
-                        }
-                    }
-
-                    // Emit end scope if configured
-                    if top.scope != nil {
-                        emitter.endScope()
-                    }
-
-                    if !top.excludeEnd {
-                        if let endScope = top.endScope {
-                            if case .single(let scope) = endScope {
-                                emitter.startScope(scope)
-                                emitter.addText(match.matchData.fullMatch)
-                                emitter.endScope()
-                            } else if case .multi(let scopes) = endScope {
-                                emitMultiClass(match.matchData, scopes: scopes, emitter: emitter)
-                            }
-                        } else {
-                            emitter.addText(match.matchData.fullMatch)
-                        }
-                    }
-
-                    // Pop mode from stack
-                    modeStack.removeLast()
-                    top = modeStack.last ?? language
-
-                    // Check for endsParent
-                    if match.rule.endsParent {
-                        // Also end the parent
-                        while modeStack.count > 1 && top.endsParent {
-                            modeStack.removeLast()
-                            top = modeStack.last ?? language
-                        }
-                    }
-
-                    // Check for starts
-                    if let starts = match.rule.starts {
-                        top = starts
-                        modeStack.append(top)
-                    }
-
-                case .illegal:
-                    if !ignoreIllegals {
-                        throw HighlightError.illegalMatch(
-                            match.matchData.fullMatch,
-                            match.index
-                        )
-                    }
-                    // In ignore mode, just add the character
-                    modeBuffer.append(Character(nsCode.substring(with: NSRange(location: index, length: 1))))
-                    index += 1
-                    continue
-                }
-
-                index = match.index + match.matchData.fullMatch.count
-
-            } else {
-                // No match - add remaining text to buffer
-                modeBuffer += nsCode.substring(from: index)
-                break
-            }
-        }
-
-        // Process remaining buffer
-        if !modeBuffer.isEmpty {
-            if top.keywords != nil {
-                relevance += emitter.processKeywords(
-                    modeBuffer,
-                    keywords: top.keywords,
-                    keywordPattern: top.keywordPatternRe
-                )
-            } else {
-                emitter.addText(modeBuffer)
-            }
-        }
-
-        // Close any remaining open scopes
-        while modeStack.count > 1 {
-            if modeStack.last?.scope != nil {
-                emitter.endScope()
-            }
-            modeStack.removeLast()
-        }
+        emitter.addText(code)
 
         var result = HighlightResult(
-            value: emitter.toHTML(),
-            language: language.name,
-            relevance: relevance,
+            value: escapeHTML(code),
+            language: nil,
+            relevance: 0,
             illegal: false,
             code: code
         )
@@ -398,87 +257,467 @@ public class HighlightJS {
         return result
     }
 
-    /// Find the next match in the code for the current mode
-    private func findNextMatch(
-        in code: String,
-        for mode: CompiledMode,
-        fullCode: String,
-        offset: Int
-    ) throws -> ParseMatch? {
-        guard let matcher = mode.matcher else { return nil }
+    // MARK: - Internal Highlighting
 
-        matcher.considerAll()
+    private func highlightInternal(
+        languageName: String,
+        code: String,
+        language: CompiledLanguage,
+        ignoreIllegals: Bool,
+        continuation: CompiledMode?
+    ) throws -> HighlightResult {
+        let emitter = TokenTreeEmitter(
+            classPrefix: options.classPrefix,
+            classNameAliases: language.classNameAliases
+        )
 
-        guard let result = try matcher.exec(code, from: 0) else {
+        var keywordHits: [String: Int] = [:]
+        var relevance: Double = 0
+        var modeBuffer = ""
+        var top: CompiledMode = continuation ?? language
+        var modeStack: [CompiledMode] = [top]
+        var continuations: [String: CompiledMode] = [:]
+
+        var index = 0
+        var iterations = 0
+        var resumeScanAtSamePosition = false
+
+        struct LastMatch {
+            var type: MatchType
+            var index: Int
+            var rule: CompiledMode
+        }
+        var lastMatch: LastMatch?
+
+        let nsCode = code as NSString
+        let noMatch = -1
+
+        func aliasScope(_ scope: String) -> String {
+            language.classNameAliases?[scope] ?? scope
+        }
+
+        func emitKeyword(_ keyword: String, _ scope: String) {
+            if keyword.isEmpty { return }
+            emitter.startScope(scope)
+            emitter.addText(keyword)
+            emitter.endScope()
+        }
+
+        func processKeywords() {
+            guard let keywords = top.keywords,
+                  let keywordPattern = top.keywordPatternRe
+            else {
+                emitter.addText(modeBuffer)
+                modeBuffer = ""
+                return
+            }
+
+            var lastIndex = 0
+            var buffer = ""
+
+            while let match = RegexHelpers.exec(keywordPattern, modeBuffer, from: lastIndex) {
+                if match.index > lastIndex {
+                    buffer += (modeBuffer as NSString).substring(with: NSRange(location: lastIndex, length: match.index - lastIndex))
+                }
+
+                let rawWord = match.fullMatch
+                let word = language.caseInsensitive ? rawWord.lowercased() : rawWord
+
+                if let entry = keywords[word] {
+                    emitter.addText(buffer)
+                    buffer = ""
+
+                    let hits = (keywordHits[word] ?? 0) + 1
+                    keywordHits[word] = hits
+                    if hits <= maxKeywordHits {
+                        relevance += entry.relevance
+                    }
+
+                    if entry.scope.hasPrefix("_") {
+                        buffer += rawWord
+                    } else {
+                        emitKeyword(rawWord, aliasScope(entry.scope))
+                    }
+                } else {
+                    buffer += rawWord
+                }
+
+                lastIndex = match.index + (rawWord as NSString).length
+            }
+
+            if lastIndex < (modeBuffer as NSString).length {
+                buffer += (modeBuffer as NSString).substring(from: lastIndex)
+            }
+
+            emitter.addText(buffer)
+            modeBuffer = ""
+        }
+
+        func emitMultiClass(_ scope: [Int: String], _ emit: Set<Int>?, _ match: MatchData) {
+            let maxGroup = match.match.numberOfRanges - 1
+            var i = 1
+
+            while i <= maxGroup {
+                if let emit, !emit.contains(i) {
+                    i += 1
+                    continue
+                }
+
+                let text = match.group(i) ?? ""
+                if !text.isEmpty {
+                    if let klass = scope[i] {
+                        emitKeyword(text, aliasScope(klass))
+                    } else {
+                        modeBuffer = text
+                        processKeywords()
+                    }
+                }
+
+                i += 1
+            }
+        }
+
+        func processSubLanguage() throws {
+            guard !modeBuffer.isEmpty else { return }
+
+            switch top.subLanguage {
+            case .single(let rawName):
+                let name = normalizeLanguageName(rawName)
+                guard let subLanguage = getLanguage(name) else {
+                    emitter.addText(modeBuffer)
+                    modeBuffer = ""
+                    return
+                }
+
+                let result = try highlightInternal(
+                    languageName: name,
+                    code: modeBuffer,
+                    language: subLanguage,
+                    ignoreIllegals: true,
+                    continuation: continuations[name]
+                )
+                continuations[name] = result.top
+
+                if top.relevance > 0 {
+                    relevance += result.relevance
+                }
+                if let subEmitter = result.emitter {
+                    emitter.addSubLanguage(subEmitter, language: result.language ?? name)
+                } else {
+                    emitter.addText(modeBuffer)
+                }
+
+            case .multiple(let names):
+                let subset = names.isEmpty ? nil : names.map { normalizeLanguageName($0) }
+                let result = highlightAuto(modeBuffer, languageSubset: subset)
+
+                if top.relevance > 0 {
+                    relevance += result.relevance
+                }
+                if let subEmitter = result.result.emitter {
+                    emitter.addSubLanguage(subEmitter, language: result.language ?? "")
+                } else {
+                    emitter.addText(modeBuffer)
+                }
+
+            case .auto:
+                let result = highlightAuto(modeBuffer, languageSubset: nil)
+
+                if top.relevance > 0 {
+                    relevance += result.relevance
+                }
+                if let lang = result.language,
+                   let subEmitter = result.result.emitter {
+                    emitter.addSubLanguage(subEmitter, language: lang)
+                } else {
+                    emitter.addText(modeBuffer)
+                }
+
+            case .none:
+                emitter.addText(modeBuffer)
+            }
+
+            modeBuffer = ""
+        }
+
+        func processBuffer() throws {
+            if top.subLanguage != nil {
+                try processSubLanguage()
+            } else {
+                processKeywords()
+            }
+        }
+
+        func startNewMode(_ mode: CompiledMode, _ match: MatchData) {
+            if let scope = mode.scope {
+                emitter.startScope(aliasScope(scope))
+            }
+
+            if let beginScope = mode.beginScope {
+                switch beginScope {
+                case .single(let scope):
+                    emitKeyword(modeBuffer, aliasScope(scope))
+                    modeBuffer = ""
+                case .multi(let scopes):
+                    if let wrap = scopes[0], mode.beginScopeEmit?.contains(0) == true {
+                        emitKeyword(modeBuffer, aliasScope(wrap))
+                    } else {
+                        emitMultiClass(scopes, mode.beginScopeEmit, match)
+                    }
+                    modeBuffer = ""
+                }
+            }
+
+            modeStack.append(mode)
+            top = mode
+        }
+
+        func endOfMode(_ modeIndex: Int, _ match: MatchData, _ matchPlusRemainder: String) -> Int? {
+            guard modeIndex >= 0 else { return nil }
+            let mode = modeStack[modeIndex]
+
+            var matched = RegexHelpers.startsWith(mode.endRe, matchPlusRemainder)
+            if matched {
+                if let onEnd = mode.onEnd {
+                    let response = Response(mode: mode)
+                    onEnd(match, response)
+                    if response.isMatchIgnored {
+                        matched = false
+                    }
+                }
+
+                if matched {
+                    var target = modeIndex
+                    while modeStack[target].endsParent && target > 0 {
+                        target -= 1
+                    }
+                    return target
+                }
+            }
+
+            if mode.endsWithParent, modeIndex > 0 {
+                return endOfMode(modeIndex - 1, match, matchPlusRemainder)
+            }
+
             return nil
         }
 
-        return ParseMatch(
-            index: offset + result.match.index,
-            type: result.type,
-            rule: result.rule,
-            matchData: result.match
-        )
-    }
-
-    /// Emit multi-class scopes for complex matches
-    private func emitMultiClass(
-        _ match: MatchData,
-        scopes: [Int: String],
-        emitter: TokenTreeEmitter
-    ) {
-        // For each group in the match, emit with its scope
-        for (groupIndex, scope) in scopes.sorted(by: { $0.key < $1.key }) {
-            if let groupText = match.group(groupIndex), !groupText.isEmpty {
-                emitter.startScope(scope)
-                emitter.addText(groupText)
-                emitter.endScope()
-            }
-        }
-    }
-
-    // MARK: - Sub-language Handling
-
-    /// Process a sub-language embedded in the current code
-    private func processSubLanguage(
-        code: String,
-        subLanguage: SubLanguage,
-        emitter: TokenTreeEmitter
-    ) -> Double {
-        switch subLanguage {
-        case .single(let name):
-            if getLanguage(name) != nil {
-                let result = highlight(code, language: name, ignoreIllegals: true)
-                if let subEmitter = result.emitter {
-                    emitter.addSubLanguage(subEmitter, language: name)
+        func doIgnore(_ lexeme: String) -> Int {
+            guard let matcher = top.matcher else { return 1 }
+            if matcher.regexIndex == 0 {
+                if !lexeme.isEmpty {
+                    modeBuffer += (lexeme as NSString).substring(to: 1)
                 }
-                return result.relevance
+                return 1
             }
 
-        case .multiple(let names):
-            let autoResult = highlightAuto(code, languageSubset: names)
-            if let lang = autoResult.result.language, let subEmitter = autoResult.result.emitter {
-                emitter.addSubLanguage(subEmitter, language: lang)
-            }
-            return autoResult.result.relevance
-
-        case .auto:
-            let autoResult = highlightAuto(code, languageSubset: nil)
-            if let lang = autoResult.result.language, let subEmitter = autoResult.result.emitter {
-                emitter.addSubLanguage(subEmitter, language: lang)
-            }
-            return autoResult.result.relevance
+            resumeScanAtSamePosition = true
+            return 0
         }
 
-        // Fallback - just add as text
-        emitter.addText(code)
-        return 0
+        func doBeginMatch(_ match: ParseMatch) throws -> Int {
+            let lexeme = match.matchData.fullMatch
+            let newMode = match.rule
+
+            let response = Response(mode: newMode)
+            let callbacks = [newMode.beforeBegin, newMode.onBegin]
+            for callback in callbacks {
+                guard let callback else { continue }
+                callback(match.matchData, response)
+                if response.isMatchIgnored {
+                    return doIgnore(lexeme)
+                }
+            }
+
+            if newMode.skip {
+                modeBuffer += lexeme
+            } else {
+                if newMode.excludeBegin {
+                    modeBuffer += lexeme
+                }
+                try processBuffer()
+                if !newMode.returnBegin && !newMode.excludeBegin {
+                    modeBuffer = lexeme
+                }
+            }
+
+            startNewMode(newMode, match.matchData)
+            return newMode.returnBegin ? 0 : (lexeme as NSString).length
+        }
+
+        func doEndMatch(_ match: ParseMatch) throws -> Int {
+            let lexeme = match.matchData.fullMatch
+            let remainder = nsCode.substring(from: match.index)
+
+            guard let endModeIndex = endOfMode(modeStack.count - 1, match.matchData, remainder) else {
+                return noMatch
+            }
+
+            let origin = top
+            let endMode = modeStack[endModeIndex]
+
+            if let endScope = origin.endScope {
+                switch endScope {
+                case .single(let scope):
+                    try processBuffer()
+                    emitKeyword(lexeme, aliasScope(scope))
+                case .multi(let scopes):
+                    try processBuffer()
+                    emitMultiClass(scopes, origin.endScopeEmit, match.matchData)
+                }
+            } else if origin.skip {
+                modeBuffer += lexeme
+            } else {
+                if !(origin.returnEnd || origin.excludeEnd) {
+                    modeBuffer += lexeme
+                }
+                try processBuffer()
+                if origin.excludeEnd {
+                    modeBuffer = lexeme
+                }
+            }
+
+            while modeStack.count > endModeIndex {
+                let closing = modeStack.removeLast()
+                if closing.scope != nil {
+                    emitter.endScope()
+                }
+                if !closing.skip && closing.subLanguage == nil {
+                    relevance += closing.relevance
+                }
+            }
+            top = modeStack.last ?? language
+
+            if let starts = endMode.starts {
+                startNewMode(starts, match.matchData)
+            }
+
+            return origin.returnEnd ? 0 : (lexeme as NSString).length
+        }
+
+        func processContinuations() {
+            var scopes: [String] = []
+            var current: CompiledMode? = top
+
+            while let node = current, node !== language {
+                if let scope = node.scope {
+                    scopes.insert(aliasScope(scope), at: 0)
+                }
+                current = node.parent
+            }
+
+            for scope in scopes {
+                emitter.startScope(scope)
+            }
+        }
+
+        func processLexeme(_ textBeforeMatch: String, _ match: ParseMatch?) throws -> Int {
+            let lexeme = match?.matchData.fullMatch
+            modeBuffer += textBeforeMatch
+
+            guard let match, let lexeme else {
+                try processBuffer()
+                return 0
+            }
+
+            if let lastMatch,
+               lastMatch.type == .begin,
+               match.type == .end,
+               lastMatch.index == match.index,
+               lexeme.isEmpty {
+                if match.index < nsCode.length {
+                    modeBuffer += nsCode.substring(with: NSRange(location: match.index, length: 1))
+                }
+                return 1
+            }
+            lastMatch = LastMatch(type: match.type, index: match.index, rule: match.rule)
+
+            if match.type == .begin {
+                return try doBeginMatch(match)
+            }
+
+            if match.type == .illegal, !ignoreIllegals {
+                throw HighlightError.illegalMatch(lexeme, match.index)
+            }
+
+            if match.type == .end {
+                let processed = try doEndMatch(match)
+                if processed != noMatch {
+                    return processed
+                }
+            }
+
+            if match.type == .illegal, lexeme.isEmpty {
+                if match.index != nsCode.length {
+                    modeBuffer += "\n"
+                }
+                return 1
+            }
+
+            if iterations > 100_000 && iterations > match.index * 3 {
+                throw HighlightError.regexCompilationError(
+                    "potential infinite loop",
+                    NSError(domain: "SwiftHighlight", code: 3)
+                )
+            }
+
+            modeBuffer += lexeme
+            return (lexeme as NSString).length
+        }
+
+        processContinuations()
+
+        top.matcher?.considerAll()
+
+        while true {
+            iterations += 1
+
+            if resumeScanAtSamePosition {
+                resumeScanAtSamePosition = false
+            } else {
+                top.matcher?.considerAll()
+            }
+
+            top.matcher?.lastIndex = index
+            guard let matchResult = try top.matcher?.exec(code, from: index) else {
+                break
+            }
+
+            let match = ParseMatch(
+                index: matchResult.match.index,
+                type: matchResult.type,
+                rule: matchResult.rule,
+                matchData: matchResult.match
+            )
+
+            let beforeLength = max(0, match.index - index)
+            let beforeMatch = nsCode.substring(with: NSRange(location: index, length: beforeLength))
+            let processed = try processLexeme(beforeMatch, match)
+            index = match.index + processed
+        }
+
+        if index <= nsCode.length {
+            let remainder = nsCode.substring(from: index)
+            _ = try processLexeme(remainder, nil)
+        }
+
+        emitter.finalize()
+
+        var result = HighlightResult(
+            value: emitter.toHTML(),
+            language: languageName,
+            relevance: relevance,
+            illegal: false,
+            code: code
+        )
+        result.emitter = emitter
+        result.top = top
+        return result
     }
 }
 
 // MARK: - Parse Match
 
-/// Represents a match found during parsing
 private struct ParseMatch {
     let index: Int
     let type: MatchType
@@ -488,45 +727,39 @@ private struct ParseMatch {
 
 // MARK: - Regex Helper
 
-/// Helper class providing regex utilities to language definitions
-/// This mirrors the `hljs.regex` object in JavaScript
-public class RegexHelper {
+/// Helper class providing regex utilities to language definitions.
+public final class RegexHelper {
 
-    /// Concatenate patterns
     public func concat(_ patterns: String...) -> String {
-        return RegexHelpers.concat(patterns)
+        RegexHelpers.concat(patterns)
     }
 
-    /// Create alternation
     public func either(_ patterns: String...) -> String {
-        return RegexHelpers.either(patterns)
+        RegexHelpers.either(patterns)
     }
 
-    /// Create lookahead
     public func lookahead(_ pattern: String) -> String {
-        return RegexHelpers.lookahead(pattern)
+        RegexHelpers.lookahead(pattern)
     }
 
-    /// Make optional
     public func optional(_ pattern: String) -> String {
-        return RegexHelpers.optional(pattern)
+        RegexHelpers.optional(pattern)
     }
 
-    /// Make repeatable
     public func anyNumberOfTimes(_ pattern: String) -> String {
-        return RegexHelpers.anyNumberOfTimes(pattern)
+        RegexHelpers.anyNumberOfTimes(pattern)
     }
 }
 
 // MARK: - Convenience Extensions
 
 extension HighlightJS {
-    /// Quick highlight with auto-detection
+    /// Quick highlight with auto-detection.
     public func highlight(_ code: String) -> HighlightResult {
-        return highlightAuto(code).result
+        highlightAuto(code).result
     }
 
-    /// Get highlighted HTML with wrapping
+    /// Get highlighted HTML with optional `<pre><code>` wrapper.
     public func highlightedHTML(
         _ code: String,
         language: String? = nil,
@@ -547,9 +780,8 @@ extension HighlightJS {
         return result.value
     }
 
-    /// Register all built-in languages
-    /// This should be called after importing language definitions
+    /// Register all built-in languages (language modules call registration APIs).
     public func registerAllLanguages() {
-        // Languages will be registered individually via language modules
+        // Intentionally empty.
     }
 }

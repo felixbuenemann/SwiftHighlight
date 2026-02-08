@@ -164,6 +164,7 @@ public class Mode {
     public var begin: PatternLike?
     public var end: PatternLike?
     public var match: PatternLike?
+    public var beforeMatch: PatternLike?
 
     // Scopes
     public var scope: Scope?
@@ -194,6 +195,7 @@ public class Mode {
     public var relevance: Double?
 
     // Callbacks
+    public var beforeBegin: ((MatchData, Response) -> Void)?
     public var onBegin: ((MatchData, Response) -> Void)?
     public var onEnd: ((MatchData, Response) -> Void)?
 
@@ -203,6 +205,10 @@ public class Mode {
     // For internal use
     public var parent: Mode?
     internal var cachedVariants: [Mode]?
+    /// Internal: emit set for multi-class beginScope (computed during applyExtensions)
+    internal var _beginScopeEmit: Set<Int>?
+    /// Internal: emit set for multi-class endScope (computed during applyExtensions)
+    internal var _endScopeEmit: Set<Int>?
 
     public init() {}
 
@@ -212,6 +218,7 @@ public class Mode {
         mode.begin = begin
         mode.end = end
         mode.match = match
+        mode.beforeMatch = beforeMatch
         mode.scope = scope
         mode.beginScope = beginScope
         mode.endScope = endScope
@@ -230,10 +237,14 @@ public class Mode {
         mode.skip = skip
         mode.variants = variants
         mode.relevance = relevance
+        mode.beforeBegin = beforeBegin
         mode.onBegin = onBegin
         mode.onEnd = onEnd
         mode.starts = starts
         mode.parent = parent
+        mode.cachedVariants = cachedVariants
+        mode._beginScopeEmit = _beginScopeEmit
+        mode._endScopeEmit = _endScopeEmit
         return mode
     }
 }
@@ -276,6 +287,12 @@ public class CompiledMode {
     public var keywordPatternRe: NSRegularExpression?
     public var subLanguage: SubLanguage?
 
+    /// Top-level group indices to emit for multi-class beginScope patterns.
+    /// When set, emitMultiClass uses this to determine which groups are
+    /// top-level (vs inner sub-groups that should not be emitted separately).
+    public var beginScopeEmit: Set<Int>?
+    public var endScopeEmit: Set<Int>?
+
     // Control flags
     public var endsParent: Bool = false
     public var endsWithParent: Bool = false
@@ -286,6 +303,7 @@ public class CompiledMode {
     public var skip: Bool = false
 
     // Callbacks
+    public var beforeBegin: ((MatchData, Response) -> Void)?
     public var onBegin: ((MatchData, Response) -> Void)?
     public var onEnd: ((MatchData, Response) -> Void)?
 
@@ -299,6 +317,7 @@ public class CompiledMode {
     // Metadata
     public var relevance: Double = 1
     public var depth: Int = 0
+    public var data: NSMutableDictionary = [:]
 
     // Language info (only for top-level)
     public var name: String?
@@ -322,7 +341,7 @@ public enum PatternLike {
         case .string(let s): return NSRegularExpression.escapedPattern(for: s)
         case .regex(let r): return r
         case .regexWithFlags(let p, _): return p
-        case .array(let arr): return arr.map { $0.asString }.joined(separator: "|")
+        case .array(let arr): return arr.map { "(" + $0.asString + ")" }.joined()
         }
     }
 }
@@ -332,11 +351,14 @@ public enum PatternLike {
 /// Data about a regex match
 public struct MatchData {
     public let match: NSTextCheckingResult
-    public let text: String
+    public var text: String
     public let index: Int
     public let input: String
     public var rule: Int = 0
     public var type: MatchType = .begin
+    /// Offset for group indices when match comes from a combined regex (MultiRegex).
+    /// group(n) actually reads match.range(at: n + groupOffset).
+    public var groupOffset: Int = 0
 
     public init(match: NSTextCheckingResult, text: String, index: Int, input: String) {
         self.match = match
@@ -347,13 +369,14 @@ public struct MatchData {
 
     /// Get the full match string
     public var fullMatch: String {
-        return text
+        return group(0) ?? text
     }
 
-    /// Get a capture group by index
+    /// Get a capture group by index (adjusted by groupOffset for combined regexes)
     public func group(_ index: Int) -> String? {
-        guard index < match.numberOfRanges else { return nil }
-        let range = match.range(at: index)
+        let adjusted = index + groupOffset
+        guard adjusted < match.numberOfRanges else { return nil }
+        let range = match.range(at: adjusted)
         guard range.location != NSNotFound else { return nil }
         let start = input.index(input.startIndex, offsetBy: range.location)
         let end = input.index(start, offsetBy: range.length)
@@ -372,11 +395,11 @@ public enum MatchType {
 
 /// Response object for match callbacks
 public class Response {
-    public var data: [String: Any]
+    public var data: NSMutableDictionary
     public var isMatchIgnored: Bool = false
 
     public init(mode: CompiledMode? = nil) {
-        self.data = [:]
+        self.data = mode?.data ?? [:]
     }
 
     /// Mark this match to be ignored
@@ -389,6 +412,7 @@ public class Response {
 
 /// A language definition function type
 public typealias LanguageDefinition = (HighlightJS) -> Language
+public typealias CompilerExtension = (_ mode: Mode, _ parent: Mode?) -> Void
 
 /// A language definition
 public class Language: Mode {
@@ -399,6 +423,7 @@ public class Language: Mode {
     public var supersetOf: String?
     public var classNameAliases: [String: String]?
     public var unicodeRegex: Bool = false
+    public var compilerExtensions: [CompilerExtension] = []
 
     public override init() {
         super.init()
@@ -411,6 +436,7 @@ public class Language: Mode {
         lang.begin = begin
         lang.end = end
         lang.match = match
+        lang.beforeMatch = beforeMatch
         lang.scope = scope
         lang.beginScope = beginScope
         lang.endScope = endScope
@@ -429,10 +455,14 @@ public class Language: Mode {
         lang.skip = skip
         lang.variants = variants
         lang.relevance = relevance
+        lang.beforeBegin = beforeBegin
         lang.onBegin = onBegin
         lang.onEnd = onEnd
         lang.starts = starts
         lang.parent = parent
+        lang.cachedVariants = cachedVariants
+        lang._beginScopeEmit = _beginScopeEmit
+        lang._endScopeEmit = _endScopeEmit
         // Copy Language properties
         lang.name = name
         lang.aliases = aliases
@@ -441,6 +471,7 @@ public class Language: Mode {
         lang.supersetOf = supersetOf
         lang.classNameAliases = classNameAliases
         lang.unicodeRegex = unicodeRegex
+        lang.compilerExtensions = compilerExtensions
         return lang
     }
 }
