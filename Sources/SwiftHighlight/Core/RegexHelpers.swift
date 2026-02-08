@@ -291,6 +291,8 @@ public final class MultiRegex {
     }
 }
 
+extension MultiRegex: @unchecked Sendable {}
+
 // MARK: - Resumable Multi-Regex
 
 /// A multi-regex that can resume scanning at the same source position.
@@ -299,11 +301,15 @@ public final class ResumableMultiRegex {
     private var multiRegexCache: [Int: MultiRegex] = [:]
     private var beginRuleCount = 0
 
-    public var lastIndex: Int = 0
-    public private(set) var regexIndex: Int = 0
-
     private let caseInsensitive: Bool
     private let unicodeRegex: Bool
+
+    /// Per-scan mutable state, kept external so the regex itself is immutable after construction.
+    public struct ScanState {
+        public var regexIndex: Int = 0
+        public var lastIndex: Int = 0
+        public init() {}
+    }
 
     public struct RuleMetadata {
         public let rule: CompiledMode
@@ -349,12 +355,8 @@ public final class ResumableMultiRegex {
         return matcher
     }
 
-    public func resumingScanAtSamePosition() -> Bool {
-        regexIndex != 0
-    }
-
-    public func considerAll() {
-        regexIndex = 0
+    public func considerAll(_ state: inout ScanState) {
+        state.regexIndex = 0
     }
 
     public func addRule(_ pattern: String, rule: CompiledMode, type: MatchType = .begin) {
@@ -365,23 +367,23 @@ public final class ResumableMultiRegex {
         multiRegexCache.removeAll()
     }
 
-    public func exec(_ string: String, from position: Int = 0) throws -> MatchResult? {
-        lastIndex = position
+    public func exec(_ string: String, from position: Int = 0, state: inout ScanState) throws -> MatchResult? {
+        state.lastIndex = position
 
-        guard let matcher = try getMatcher(from: regexIndex) else {
+        guard let matcher = try getMatcher(from: state.regexIndex) else {
             return nil
         }
 
-        matcher.lastIndex = lastIndex
+        matcher.lastIndex = state.lastIndex
         var result = matcher.exec(string)
 
-        if resumingScanAtSamePosition() {
-            if let result, result.match.index == lastIndex {
+        if state.regexIndex != 0 {
+            if let result, result.match.index == state.lastIndex {
                 // Keep resumed match.
             } else {
                 guard let fullMatcher = try getMatcher(from: 0) else { return nil }
                 let nsString = string as NSString
-                fullMatcher.lastIndex = min(lastIndex + 1, nsString.length)
+                fullMatcher.lastIndex = min(state.lastIndex + 1, nsString.length)
                 result = fullMatcher.exec(string)
             }
         }
@@ -390,9 +392,9 @@ public final class ResumableMultiRegex {
             return nil
         }
 
-        regexIndex += metadata.position + 1
-        if regexIndex == beginRuleCount {
-            considerAll()
+        state.regexIndex += metadata.position + 1
+        if state.regexIndex == beginRuleCount {
+            considerAll(&state)
         }
 
         guard matchData.rule < rules.count else { return nil }
@@ -411,3 +413,5 @@ public final class ResumableMultiRegex {
         rules.isEmpty
     }
 }
+
+extension ResumableMultiRegex: @unchecked Sendable {}

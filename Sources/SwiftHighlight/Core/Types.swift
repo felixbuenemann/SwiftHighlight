@@ -19,30 +19,31 @@ public struct HighlightResult {
     /// The original code that was highlighted
     public var code: String?
 
-    /// For internal use: the final mode state for continuation
-    internal var top: CompiledMode?
-
-    /// For internal use: the emitter containing the token tree
-    internal var emitter: TokenTreeEmitter?
-
     /// The token tree for attributed string rendering
-    public var tokenTree: TokenNode? {
-        return emitter?.rootNode
-    }
+    public var tokenTree: TokenNode?
 
     public init(
         value: String = "",
         language: String? = nil,
         relevance: Double = 0,
         illegal: Bool = false,
-        code: String? = nil
+        code: String? = nil,
+        tokenTree: TokenNode? = nil
     ) {
         self.value = value
         self.language = language
         self.relevance = relevance
         self.illegal = illegal
         self.code = code
+        self.tokenTree = tokenTree
     }
+}
+
+/// Internal state carried between highlight passes (sub-language embedding, continuations).
+/// Not exposed in the public API.
+internal struct HighlightInternalState {
+    var top: CompiledMode?
+    var emitter: TokenTreeEmitter?
 }
 
 /// Result of auto-detection highlighting
@@ -399,7 +400,7 @@ public class Response {
     public var isMatchIgnored: Bool = false
 
     public init(mode: CompiledMode? = nil) {
-        self.data = mode?.data ?? [:]
+        self.data = (mode?.data.mutableCopy() as? NSMutableDictionary) ?? [:]
     }
 
     /// Mark this match to be ignored
@@ -489,6 +490,16 @@ public class CompiledLanguage: CompiledMode {
         super.init()
     }
 }
+
+// MARK: - Sendable Conformances
+
+extension HighlightResult: Sendable {}
+extension AutoHighlightResult: Sendable {}
+extension HighlightOptions: Sendable {}
+extension KeywordEntry: Sendable {}
+extension MatchType: Sendable {}
+extension CompiledMode: @unchecked Sendable {}
+extension CompiledLanguage: @unchecked Sendable {}
 
 // MARK: - Errors
 

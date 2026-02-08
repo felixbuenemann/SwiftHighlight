@@ -11,23 +11,27 @@ public final class HighlightJS {
     private var compiledLanguages: [String: CompiledLanguage] = [:]
     private var aliases: [String: String] = [:]
     private var allAliasesResolved = false
+    private let lock = NSRecursiveLock()
 
-    public var options: HighlightOptions
-    public var safeMode: Bool = true
+    public let options: HighlightOptions
+    public let safeMode: Bool
 
     /// Regex helper API used by language definitions.
     public let regex = RegexHelper()
 
     private let maxKeywordHits = 7
 
-    public init(options: HighlightOptions = HighlightOptions()) {
+    public init(options: HighlightOptions = HighlightOptions(), safeMode: Bool = true) {
         self.options = options
+        self.safeMode = safeMode
     }
 
     // MARK: - Language Registration
 
     public func registerLanguage(_ name: String, definition: @escaping LanguageDefinition) {
         let key = name.lowercased()
+        lock.lock()
+        defer { lock.unlock() }
         languages[key] = definition
         compiledLanguages.removeValue(forKey: key)
 
@@ -42,6 +46,8 @@ public final class HighlightJS {
 
     public func registerAliases(_ names: [String], forLanguage languageName: String) {
         let target = languageName.lowercased()
+        lock.lock()
+        defer { lock.unlock() }
         for alias in names {
             aliases[alias.lowercased()] = target
         }
@@ -49,14 +55,16 @@ public final class HighlightJS {
 
     public func getLanguage(_ name: String) -> CompiledLanguage? {
         let normalized = normalizeLanguageName(name)
-        if let compiled = getLanguageDirect(normalized) {
+        lock.lock()
+        defer { lock.unlock() }
+        if let compiled = getLanguageDirect_locked(normalized) {
             return compiled
         }
 
         if !allAliasesResolved {
-            resolveAllAliases()
+            resolveAllAliases_locked()
             let resolved = aliases[normalized] ?? normalized
-            return getLanguageDirect(resolved)
+            return getLanguageDirect_locked(resolved)
         }
 
         return nil
@@ -64,13 +72,15 @@ public final class HighlightJS {
 
     public func hasLanguage(_ name: String) -> Bool {
         let normalized = normalizeLanguageName(name)
+        lock.lock()
+        defer { lock.unlock() }
         let resolved = aliases[normalized] ?? normalized
         if languages[resolved] != nil {
             return true
         }
 
         if !allAliasesResolved {
-            resolveAllAliases()
+            resolveAllAliases_locked()
             let resolvedAfter = aliases[normalized] ?? normalized
             return languages[resolvedAfter] != nil
         }
@@ -79,7 +89,9 @@ public final class HighlightJS {
     }
 
     public func listLanguages() -> [String] {
-        Array(languages.keys).sorted()
+        lock.lock()
+        defer { lock.unlock() }
+        return Array(languages.keys).sorted()
     }
 
     public func autoDetection(_ name: String) -> Bool {
@@ -91,7 +103,8 @@ public final class HighlightJS {
         name.lowercased()
     }
 
-    private func getLanguageDirect(_ normalizedName: String) -> CompiledLanguage? {
+    /// Must be called with `lock` held.
+    private func getLanguageDirect_locked(_ normalizedName: String) -> CompiledLanguage? {
         let resolvedName = aliases[normalizedName] ?? normalizedName
 
         if let cached = compiledLanguages[resolvedName] {
@@ -126,7 +139,8 @@ public final class HighlightJS {
         }
     }
 
-    private func resolveAllAliases() {
+    /// Must be called with `lock` held.
+    private func resolveAllAliases_locked() {
         allAliasesResolved = true
         for (name, definition) in languages where compiledLanguages[name] == nil {
             let language = definition(self)
@@ -145,9 +159,15 @@ public final class HighlightJS {
     ) -> HighlightResult {
         let shouldIgnoreIllegals = ignoreIllegals ?? options.ignoreIllegals
         let requestedName = normalizeLanguageName(language)
-        let resolvedName = aliases[requestedName] ?? requestedName
 
-        guard let compiledLanguage = getLanguageDirect(resolvedName) else {
+        let (resolvedName, compiledLanguage): (String, CompiledLanguage?) = {
+            lock.lock()
+            defer { lock.unlock() }
+            let resolved = aliases[requestedName] ?? requestedName
+            return (resolved, getLanguageDirect_locked(resolved))
+        }()
+
+        guard let compiledLanguage else {
             return HighlightResult(
                 value: escapeHTML(code),
                 language: nil,
@@ -158,7 +178,7 @@ public final class HighlightJS {
         }
 
         do {
-            var result = try highlightInternal(
+            var (result, _) = try highlightInternal(
                 languageName: resolvedName,
                 code: code,
                 language: compiledLanguage,
@@ -182,18 +202,28 @@ public final class HighlightJS {
         _ code: String,
         languageSubset: [String]? = nil
     ) -> AutoHighlightResult {
-        let subset = languageSubset ?? options.languageSubset ?? listLanguages()
+        // Gather all candidate languages under the lock, then highlight outside it.
+        let candidates: [(name: String, language: CompiledLanguage)] = {
+            lock.lock()
+            defer { lock.unlock() }
+            let subset = languageSubset ?? options.languageSubset ?? Array(languages.keys).sorted()
+            var result: [(String, CompiledLanguage)] = []
+            for languageName in subset {
+                let normalized = normalizeLanguageName(languageName)
+                guard let resolved = resolveRegisteredLanguageName_locked(normalized) else { continue }
+                guard let compiled = getLanguageDirect_locked(resolved) else { continue }
+                guard !compiled.disableAutodetect else { continue }
+                result.append((resolved, compiled))
+            }
+            return result
+        }()
 
         var results: [HighlightResult] = [justTextHighlightResult(code)]
 
-        for languageName in subset {
-            guard autoDetection(languageName) else { continue }
-            guard let resolved = resolveRegisteredLanguageName(languageName) else { continue }
-            guard let language = getLanguageDirect(resolved) else { continue }
-
+        for (name, language) in candidates {
             do {
-                let result = try highlightInternal(
-                    languageName: resolved,
+                let (result, _) = try highlightInternal(
+                    languageName: name,
                     code: code,
                     language: language,
                     ignoreIllegals: false,
@@ -210,14 +240,16 @@ public final class HighlightJS {
                 return lhs.relevance > rhs.relevance
             }
 
+            // Break ties using supersetOf relationship (already compiled during candidate gathering).
             if let leftLang = lhs.language,
-               let rightLang = rhs.language,
-               let leftCompiled = getLanguageDirect(leftLang),
-               let rightCompiled = getLanguageDirect(rightLang),
-               let leftRaw = leftCompiled.rawDefinition,
-               let rightRaw = rightCompiled.rawDefinition {
-                if leftRaw.supersetOf == rightLang { return false }
-                if rightRaw.supersetOf == leftLang { return true }
+               let rightLang = rhs.language {
+                let leftDef = candidates.first(where: { $0.name == leftLang })?.language
+                let rightDef = candidates.first(where: { $0.name == rightLang })?.language
+                if let leftRaw = leftDef?.rawDefinition,
+                   let rightRaw = rightDef?.rawDefinition {
+                    if leftRaw.supersetOf == rightLang { return false }
+                    if rightRaw.supersetOf == leftLang { return true }
+                }
             }
 
             return false
@@ -228,7 +260,7 @@ public final class HighlightJS {
         return AutoHighlightResult(result: best, secondBest: secondBest)
     }
 
-    private func resolveRegisteredLanguageName(_ name: String) -> String? {
+    private func resolveRegisteredLanguageName_locked(_ name: String) -> String? {
         let normalized = normalizeLanguageName(name)
         if languages[normalized] != nil {
             return normalized
@@ -246,15 +278,14 @@ public final class HighlightJS {
         )
         emitter.addText(code)
 
-        var result = HighlightResult(
+        return HighlightResult(
             value: escapeHTML(code),
             language: nil,
             relevance: 0,
             illegal: false,
-            code: code
+            code: code,
+            tokenTree: emitter.rootNode
         )
-        result.emitter = emitter
-        return result
     }
 
     // MARK: - Internal Highlighting
@@ -265,7 +296,7 @@ public final class HighlightJS {
         language: CompiledLanguage,
         ignoreIllegals: Bool,
         continuation: CompiledMode?
-    ) throws -> HighlightResult {
+    ) throws -> (HighlightResult, HighlightInternalState) {
         let emitter = TokenTreeEmitter(
             classPrefix: options.classPrefix,
             classNameAliases: language.classNameAliases
@@ -281,6 +312,7 @@ public final class HighlightJS {
         var index = 0
         var iterations = 0
         var resumeScanAtSamePosition = false
+        var scanState = ResumableMultiRegex.ScanState()
 
         struct LastMatch {
             var type: MatchType
@@ -389,19 +421,19 @@ public final class HighlightJS {
                     return
                 }
 
-                let result = try highlightInternal(
+                let (result, subState) = try highlightInternal(
                     languageName: name,
                     code: modeBuffer,
                     language: subLanguage,
                     ignoreIllegals: true,
                     continuation: continuations[name]
                 )
-                continuations[name] = result.top
+                continuations[name] = subState.top
 
                 if top.relevance > 0 {
                     relevance += result.relevance
                 }
-                if let subEmitter = result.emitter {
+                if let subEmitter = subState.emitter {
                     emitter.addSubLanguage(subEmitter, language: result.language ?? name)
                 } else {
                     emitter.addText(modeBuffer)
@@ -414,8 +446,11 @@ public final class HighlightJS {
                 if top.relevance > 0 {
                     relevance += result.relevance
                 }
-                if let subEmitter = result.result.emitter {
-                    emitter.addSubLanguage(subEmitter, language: result.language ?? "")
+                if let subTree = result.result.tokenTree {
+                    let subNode = TokenNode()
+                    subNode.language = result.language ?? ""
+                    subNode.children = subTree.children
+                    emitter.addSubLanguageNode(subNode)
                 } else {
                     emitter.addText(modeBuffer)
                 }
@@ -427,8 +462,11 @@ public final class HighlightJS {
                     relevance += result.relevance
                 }
                 if let lang = result.language,
-                   let subEmitter = result.result.emitter {
-                    emitter.addSubLanguage(subEmitter, language: lang)
+                   let subTree = result.result.tokenTree {
+                    let subNode = TokenNode()
+                    subNode.language = lang
+                    subNode.children = subTree.children
+                    emitter.addSubLanguageNode(subNode)
                 } else {
                     emitter.addText(modeBuffer)
                 }
@@ -503,8 +541,8 @@ public final class HighlightJS {
         }
 
         func doIgnore(_ lexeme: String) -> Int {
-            guard let matcher = top.matcher else { return 1 }
-            if matcher.regexIndex == 0 {
+            guard top.matcher != nil else { return 1 }
+            if scanState.regexIndex == 0 {
                 if !lexeme.isEmpty {
                     modeBuffer += (lexeme as NSString).substring(to: 1)
                 }
@@ -667,7 +705,7 @@ public final class HighlightJS {
 
         processContinuations()
 
-        top.matcher?.considerAll()
+        top.matcher?.considerAll(&scanState)
 
         while true {
             iterations += 1
@@ -675,11 +713,11 @@ public final class HighlightJS {
             if resumeScanAtSamePosition {
                 resumeScanAtSamePosition = false
             } else {
-                top.matcher?.considerAll()
+                top.matcher?.considerAll(&scanState)
             }
 
-            top.matcher?.lastIndex = index
-            guard let matchResult = try top.matcher?.exec(code, from: index) else {
+            scanState.lastIndex = index
+            guard let matchResult = try top.matcher?.exec(code, from: index, state: &scanState) else {
                 break
             }
 
@@ -703,18 +741,20 @@ public final class HighlightJS {
 
         emitter.finalize()
 
-        var result = HighlightResult(
+        let result = HighlightResult(
             value: emitter.toHTML(),
             language: languageName,
             relevance: relevance,
             illegal: false,
-            code: code
+            code: code,
+            tokenTree: emitter.rootNode
         )
-        result.emitter = emitter
-        result.top = top
-        return result
+        let internalState = HighlightInternalState(top: top, emitter: emitter)
+        return (result, internalState)
     }
 }
+
+extension HighlightJS: @unchecked Sendable {}
 
 // MARK: - Parse Match
 

@@ -77,7 +77,7 @@ struct ContentView: View {
         }
         .task {
             if let url = initialURL {
-                loadFile(at: url)
+                await loadFile(at: url)
             }
         }
     }
@@ -110,12 +110,18 @@ struct ContentView: View {
         guard case .success(let urls) = result, let url = urls.first else { return }
         guard url.startAccessingSecurityScopedResource() else { return }
         defer { url.stopAccessingSecurityScopedResource() }
-        loadFile(at: url)
+        Task { await loadFile(at: url) }
     }
 
-    private func loadFile(at url: URL) {
-        guard let data = try? Data(contentsOf: url),
-              let source = String(data: data, encoding: .utf8) else {
+    private func loadFile(at url: URL) async {
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch {
+            code = AttributedString("Failed to read file.")
+            return
+        }
+        guard let source = String(data: data, encoding: .utf8) else {
             code = AttributedString("Failed to read file.")
             return
         }
@@ -123,15 +129,19 @@ struct ContentView: View {
         fileName = url.lastPathComponent
         let ext = url.pathExtension.lowercased()
         let theme = colorScheme == .dark ? Theme.githubDark : Theme.githubLight
+        let highlighter = hljs
 
-        if !ext.isEmpty, let lang = hljs.getLanguage(ext) {
-            let attr = hljs.highlightAttributedString(source, language: ext, theme: theme)
-            detectedLanguage = lang.name ?? ext
-            code = attr
-        } else {
-            let (attr, lang) = hljs.highlightAutoAttributedString(source, theme: theme)
-            detectedLanguage = lang ?? "auto"
-            code = attr
-        }
+        let (attr, lang) = await Task.detached {
+            if !ext.isEmpty, highlighter.getLanguage(ext) != nil {
+                let attr = highlighter.highlightAttributedString(source, language: ext, theme: theme)
+                return (attr, highlighter.getLanguage(ext)?.name ?? ext)
+            } else {
+                let (attr, lang) = highlighter.highlightAutoAttributedString(source, theme: theme)
+                return (attr, lang ?? "auto")
+            }
+        }.value
+
+        detectedLanguage = lang
+        code = attr
     }
 }

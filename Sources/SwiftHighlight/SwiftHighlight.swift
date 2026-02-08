@@ -54,11 +54,6 @@ public func hasLanguage(_ name: String) -> Bool {
     return highlighter.hasLanguage(name)
 }
 
-/// Configure the highlighter
-public func configure(_ options: HighlightOptions) {
-    highlighter.options = options
-}
-
 // MARK: - Version
 
 /// The version of SwiftHighlight

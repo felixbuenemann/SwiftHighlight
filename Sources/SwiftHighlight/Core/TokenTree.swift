@@ -46,6 +46,9 @@ public enum TokenChild {
     case node(TokenNode)
 }
 
+extension TokenNode: @unchecked Sendable {}
+extension TokenChild: @unchecked Sendable {}
+
 // MARK: - Token Tree
 
 /// Manages a tree of tokens with stack-based nesting
@@ -135,6 +138,11 @@ public class TokenTreeEmitter {
     public func addSubLanguage(_ emitter: TokenTreeEmitter, language: String) {
         let node = TokenNode(scope: "language:\(language)")
         node.children = emitter.rootNode.children
+        tree.currentNode.addNode(node)
+    }
+
+    /// Add a pre-built sub-language node directly
+    public func addSubLanguageNode(_ node: TokenNode) {
         tree.currentNode.addNode(node)
     }
 
